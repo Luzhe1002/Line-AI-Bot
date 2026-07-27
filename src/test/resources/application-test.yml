@@ -1,0 +1,19 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:line_ai_bot_test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  flyway:
+    clean-disabled: false
+
+app:
+  environment: test
+  encryption-key: test-encryption-key-with-sufficient-entropy
+  platform-admin-api-key: test-platform-admin-key
+  line-api-enabled: false
+  line-worker-enabled: false
+  public-base-url: http://localhost:8000
+  ai:
+    provider: local
+    embedding-dimensions: 64
+    min-retrieval-score: 0.1

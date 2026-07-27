@@ -1,0 +1,94 @@
+package com.lineaibot.line;
+
+import com.lineaibot.config.AppProperties;
+import com.lineaibot.shared.CryptoService;
+import com.lineaibot.tenant.TenantRepository;
+import java.time.Instant;
+import java.util.List;
+import java.util.Map;
+import org.springframework.stereotype.Service;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
+
+@Service
+public class LineEventProcessor {
+
+    private final LineRepository lineRepository;
+    private final TenantRepository tenantRepository;
+    private final ConversationService conversation;
+    private final LineMessagingClient lineClient;
+    private final CryptoService crypto;
+    private final AppProperties properties;
+    private final ObjectMapper objectMapper;
+
+    public LineEventProcessor(
+            LineRepository lineRepository,
+            TenantRepository tenantRepository,
+            ConversationService conversation,
+            LineMessagingClient lineClient,
+            CryptoService crypto,
+            AppProperties properties,
+            ObjectMapper objectMapper) {
+        this.lineRepository = lineRepository;
+        this.tenantRepository = tenantRepository;
+        this.conversation = conversation;
+        this.lineClient = lineClient;
+        this.crypto = crypto;
+        this.properties = properties;
+        this.objectMapper = objectMapper;
+    }
+
+    public void process(String eventId) {
+        var event = lineRepository.findEvent(eventId).orElseThrow();
+        var tenant = tenantRepository.findById(event.tenantId())
+                .filter(TenantRepository.TenantRow::active)
+                .orElseThrow(() -> new IllegalStateException("Tenant is unavailable"));
+        var channel = tenantRepository.findLineChannel(tenant.id())
+                .filter(TenantRepository.LineChannelRow::enabled)
+                .orElseThrow(() -> new IllegalStateException("LINE channel is unavailable"));
+        try {
+            JsonNode payload = objectMapper.readTree(event.payloadJson());
+            String lineUserId = payload.path("source").path("userId").asText("");
+            String replyToken = payload.path("replyToken").asText("");
+            if (lineUserId.isBlank() || replyToken.isBlank()) {
+                lineRepository.markEventProcessed(eventId, Instant.now());
+                return;
+            }
+
+            List<Map<String, Object>> messages;
+            String eventType = payload.path("type").asText("");
+            if ("message".equals(eventType)
+                    && "text".equals(payload.path("message").path("type").asText(""))) {
+                messages = conversation.handleText(
+                        tenant,
+                        lineUserId,
+                        payload.path("message").path("text").asText(""));
+            } else if ("postback".equals(eventType)) {
+                messages = conversation.handlePostback(
+                        tenant,
+                        lineUserId,
+                        payload.path("postback").path("data").asText(""),
+                        event.webhookEventId());
+            } else {
+                messages = List.of(Map.of(
+                        "type", "text",
+                        "text", "目前僅支援文字訊息與預約操作。"));
+            }
+
+            String token = crypto.decryptSecret(
+                    properties.getEncryptionKey(), channel.channelAccessTokenEncrypted());
+            lineClient.reply(
+                    tenant.id(), token, replyToken, lineUserId, messages);
+            lineRepository.markEventProcessed(eventId, Instant.now());
+        } catch (Exception exception) {
+            int delaySeconds = (int) Math.pow(2, Math.max(0, event.attempts() - 1));
+            lineRepository.markEventRetryOrFailed(
+                    eventId,
+                    event.attempts(),
+                    exception.getMessage() == null
+                            ? exception.getClass().getSimpleName()
+                            : exception.getMessage(),
+                    Instant.now().plusSeconds(delaySeconds));
+        }
+    }
+}

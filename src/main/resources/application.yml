@@ -1,0 +1,54 @@
+spring:
+  application:
+    name: line-ai-bot
+  config:
+    import: optional:file:.env[.properties]
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./line_ai_bot_java;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${APP_DATABASE_POOL_SIZE:10}
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+  jackson:
+    property-naming-strategy: SNAKE_CASE
+    default-property-inclusion: non_null
+
+server:
+  port: ${PORT:8000}
+  forward-headers-strategy: framework
+
+springdoc:
+  api-docs:
+    path: /openapi.json
+  swagger-ui:
+    path: /docs
+    operations-sorter: method
+
+app:
+  environment: ${APP_ENVIRONMENT:development}
+  encryption-key: ${APP_ENCRYPTION_KEY:change-this-development-encryption-key}
+  platform-admin-api-key: ${APP_PLATFORM_ADMIN_API_KEY:change-this-platform-admin-key}
+  line-api-enabled: ${APP_LINE_API_ENABLED:false}
+  line-worker-enabled: ${APP_LINE_WORKER_ENABLED:true}
+  line-worker-delay-ms: ${APP_LINE_WORKER_DELAY_MS:250}
+  line-worker-concurrency: ${APP_LINE_WORKER_CONCURRENCY:8}
+  line-api-base-url: ${APP_LINE_API_BASE_URL:https://api.line.me}
+  public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8000}
+  ai:
+    provider: ${APP_AI_PROVIDER:local}
+    generation-model: ${APP_AI_GENERATION_MODEL:gpt-5.6-luna}
+    embedding-model: ${APP_AI_EMBEDDING_MODEL:text-embedding-3-small}
+    embedding-dimensions: ${APP_AI_EMBEDDING_DIMENSIONS:512}
+    reasoning-effort: ${APP_AI_REASONING_EFFORT:none}
+    min-retrieval-score: ${APP_AI_MIN_RETRIEVAL_SCORE:0.20}
+    max-context-documents: ${APP_AI_MAX_CONTEXT_DOCUMENTS:4}
+    max-context-chars: ${APP_AI_MAX_CONTEXT_CHARS:6000}
+    chunk-size-chars: ${APP_AI_CHUNK_SIZE_CHARS:1200}
+    chunk-overlap-chars: ${APP_AI_CHUNK_OVERLAP_CHARS:150}
+    max-output-tokens: ${APP_AI_MAX_OUTPUT_TOKENS:500}
+    timeout-seconds: ${APP_AI_TIMEOUT_SECONDS:20}
+    openai-api-key: ${OPENAI_API_KEY:}
+    openai-base-url: ${APP_OPENAI_BASE_URL:https://api.openai.com/v1}

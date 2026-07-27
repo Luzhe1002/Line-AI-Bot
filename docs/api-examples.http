@@ -1,0 +1,107 @@
+@baseUrl = http://localhost:8000
+@platformKey = change-this-platform-admin-key
+@tenantId = replace-after-create
+@tenantKey = replace-after-create
+@datasetId = replace-after-list
+@serviceId = replace-after-list
+@reservationId = replace-after-create
+
+### Health
+GET {{baseUrl}}/health
+
+### Create tenant - save id and admin_api_key from the response
+POST {{baseUrl}}/api/v1/tenants
+Content-Type: application/json
+X-Platform-Admin-Key: {{platformKey}}
+
+{
+  "name": "示範商家",
+  "slug": "demo-merchant",
+  "timezone": "Asia/Taipei",
+  "slot_minutes": 60
+}
+
+### Configure LINE channel
+PUT {{baseUrl}}/api/v1/tenants/{{tenantId}}/line-channel
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "channel_secret": "replace-with-line-channel-secret",
+  "channel_access_token": "replace-with-line-channel-access-token",
+  "enabled": true
+}
+
+### List default business hours
+GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/business-hours
+X-Tenant-Api-Key: {{tenantKey}}
+
+### Enable Saturday 10:00-16:00 (Monday=0, Sunday=6)
+PUT {{baseUrl}}/api/v1/tenants/{{tenantId}}/business-hours
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "weekday": 5,
+  "open_time": "10:00:00",
+  "close_time": "16:00:00",
+  "active": true
+}
+
+### List booking services - save the first service id
+GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/booking-services
+X-Tenant-Api-Key: {{tenantKey}}
+
+### Query availability
+GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/availability?service_id={{serviceId}}&local_date=2026-07-24
+X-Tenant-Api-Key: {{tenantKey}}
+
+### Create reservation
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/reservations
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "service_id": "{{serviceId}}",
+  "line_user_id": "U-example-user",
+  "customer_name": "王小明",
+  "starts_at": "2026-07-24T02:00:00Z",
+  "idempotency_key": "demo-reservation-request-0001"
+}
+
+### Cancel reservation
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/reservations/{{reservationId}}/cancel
+X-Tenant-Api-Key: {{tenantKey}}
+
+### List datasets - a draft dataset is created with each tenant
+GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/datasets
+X-Tenant-Api-Key: {{tenantKey}}
+
+### Add knowledge document
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/datasets/{{datasetId}}/documents
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "title": "營業時間",
+  "content": "本店週一至週五上午九點到下午六點營業。",
+  "source_url": null
+}
+
+### Reindex after changing AI provider, embedding model, or dimensions
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/datasets/{{datasetId}}/reindex
+X-Tenant-Api-Key: {{tenantKey}}
+
+### Publish dataset
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/datasets/{{datasetId}}/publish
+X-Tenant-Api-Key: {{tenantKey}}
+
+### Test grounded answer
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/ai/answer
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "question": "請問你們的營業時間？",
+  "line_user_id": "U-example-user"
+}

@@ -1,0 +1,45 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_DB: line_ai_bot
+      POSTGRES_USER: line_ai_bot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U line_ai_bot -d line_ai_bot"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - line-ai-bot-java-postgres:/var/lib/postgresql/data
+
+  api:
+    build: .
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/line_ai_bot
+      SPRING_DATASOURCE_USERNAME: line_ai_bot
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-local-development-password}
+      APP_ENVIRONMENT: ${APP_ENVIRONMENT:-development}
+      APP_ENCRYPTION_KEY: ${APP_ENCRYPTION_KEY:-change-this-development-encryption-key}
+      APP_PLATFORM_ADMIN_API_KEY: ${APP_PLATFORM_ADMIN_API_KEY:-change-this-platform-admin-key}
+      APP_LINE_API_ENABLED: ${APP_LINE_API_ENABLED:-false}
+      APP_LINE_API_BASE_URL: ${APP_LINE_API_BASE_URL:-https://api.line.me}
+      APP_LINE_WORKER_ENABLED: ${APP_LINE_WORKER_ENABLED:-true}
+      APP_LINE_WORKER_CONCURRENCY: ${APP_LINE_WORKER_CONCURRENCY:-8}
+      APP_PUBLIC_BASE_URL: ${APP_PUBLIC_BASE_URL:-http://localhost:8000}
+      APP_AI_PROVIDER: ${APP_AI_PROVIDER:-local}
+      APP_AI_GENERATION_MODEL: ${APP_AI_GENERATION_MODEL:-gpt-5.6-luna}
+      APP_AI_EMBEDDING_MODEL: ${APP_AI_EMBEDDING_MODEL:-text-embedding-3-small}
+      APP_AI_EMBEDDING_DIMENSIONS: ${APP_AI_EMBEDDING_DIMENSIONS:-512}
+      APP_AI_REASONING_EFFORT: ${APP_AI_REASONING_EFFORT:-none}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+    ports:
+      - "8000:8000"
+
+volumes:
+  line-ai-bot-java-postgres:

@@ -1,0 +1,4 @@
+interface:
+  display_name: "LINE AI Bot 開發"
+  short_description: "開發、設定與驗證多商家 LINE AI 客服及預約後端"
+  default_prompt: "使用 $develop-line-ai-bot 實作並驗證這個 LINE AI 客服專案的下一項功能。"
