@@ -315,9 +315,11 @@ $("#answer-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = formData(form);
+  const datasetId = $("#dataset-select").value;
+  if (!datasetId) return toast("請先建立資料集", true);
   setSubmitting(form, true, "產生回答中…");
   try {
-    const result = await api("/answer", {
+    const result = await api(`/answer?datasetId=${encodeURIComponent(datasetId)}`, {
       method: "POST",
       body: JSON.stringify({ question: data.question }),
     });

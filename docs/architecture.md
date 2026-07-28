@@ -119,6 +119,10 @@ TXT／Markdown／CSV 匯入、索引、發布及回答測試。檔案大小先�
 文件內容限制為 100,000 字，並由 Spring Multipart 在進入應用邏輯前拒絕
 過大請求。
 
+工作台的回答測試會將目前選取的 `datasetId` 傳給 `/portal/api/answer`，
+後端以 Session 租戶重新驗證資料集歸屬，因此可在發布前預覽草稿。正式
+`/api/v1/tenants/{tenantId}/ai/answer` 與 LINE 對話仍只讀取 Active Dataset。
+
 歷史對話匯入會採獨立流程：檔案掃描、格式解析、個資遮蔽、候選 FAQ 萃取、
 人工核准、加入草稿、索引與發布。未核准的對話不能進入 Active Dataset。
 

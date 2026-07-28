@@ -165,6 +165,38 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.index_status").value("READY"));
 
+        mvc.perform(post("/portal/api/answer")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", datasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "What requires review before publication?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.grounded").value(true))
+                .andExpect(jsonPath("$.dataset_id").value(datasetId))
+                .andExpect(jsonPath("$.citations[0].title").value("Portal policy"));
+
+        Tenant otherTenant = createTenant("portal-preview-other");
+        String otherDatasetId = firstId(getJson(
+                "/api/v1/tenants/" + otherTenant.id() + "/datasets",
+                otherTenant.apiKey()));
+        mvc.perform(post("/portal/api/answer")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", otherDatasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "Can this tenant read another tenant's draft?"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").value("Dataset not found"));
+
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "merchant-faq.md",

@@ -268,10 +268,11 @@ public class PortalController {
     AnswerResponse answer(
             @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
             HttpSession session,
+            @RequestParam String datasetId,
             @Valid @RequestBody AnswerRequest request) {
         requireCsrf(session, csrfToken);
-        return knowledge.answer(
-                requireTenant(session), request.question(), request.lineUserId());
+        return knowledge.previewAnswer(
+                requireTenant(session), datasetId, request.question());
     }
 
     private SessionView establishSession(

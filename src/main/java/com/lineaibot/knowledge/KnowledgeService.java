@@ -162,6 +162,22 @@ public class KnowledgeService {
                     "none");
         }
         DatasetRead dataset = activeDataset.get();
+        return answerFromDataset(tenant, dataset, question, lineUserId, provider);
+    }
+
+    public AnswerResponse previewAnswer(
+            TenantRow tenant, String datasetId, String question) {
+        DatasetRead dataset = repository.findDataset(tenant.id(), datasetId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Dataset not found"));
+        return answerFromDataset(tenant, dataset, question, null, providers.current());
+    }
+
+    private AnswerResponse answerFromDataset(
+            TenantRow tenant,
+            DatasetRead dataset,
+            String question,
+            String lineUserId,
+            AiProvider provider) {
         List<GroundingContext> contexts = retrieve(
                 tenant.id(), dataset.id(), question, provider);
         if (contexts.isEmpty()) {
