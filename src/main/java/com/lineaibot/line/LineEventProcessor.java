@@ -6,12 +6,16 @@ import com.lineaibot.tenant.TenantRepository;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
 public class LineEventProcessor {
+
+    private static final Logger log = LoggerFactory.getLogger(LineEventProcessor.class);
 
     private final LineRepository lineRepository;
     private final TenantRepository tenantRepository;
@@ -87,7 +91,19 @@ public class LineEventProcessor {
             lineClient.reply(
                     tenant.id(), token, replyToken, lineUserId, messages);
             lineRepository.markEventProcessed(eventId, Instant.now());
+            log.info(
+                    "LINE event processed eventId={} tenantId={} attempt={}",
+                    eventId,
+                    tenant.id(),
+                    event.attempts());
         } catch (Exception exception) {
+            log.warn(
+                    "LINE event processing failed eventId={} tenantId={} attempt={} errorType={} message={}",
+                    eventId,
+                    event.tenantId(),
+                    event.attempts(),
+                    exception.getClass().getSimpleName(),
+                    exception.getMessage());
             int delaySeconds = (int) Math.pow(2, Math.max(0, event.attempts() - 1));
             lineRepository.markEventRetryOrFailed(
                     eventId,

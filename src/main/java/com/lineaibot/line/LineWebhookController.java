@@ -11,6 +11,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Instant;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -25,6 +27,8 @@ import tools.jackson.databind.ObjectMapper;
 @RestController
 @RequestMapping("/webhooks/line")
 public class LineWebhookController {
+
+    private static final Logger log = LoggerFactory.getLogger(LineWebhookController.class);
 
     public record WebhookAccepted(int accepted, int duplicate) {}
 
@@ -101,6 +105,12 @@ public class LineWebhookController {
                 duplicate++;
             }
         }
+        log.info(
+                "LINE webhook accepted tenantId={} eventCount={} accepted={} duplicate={}",
+                tenant.id(),
+                eventNodes.size(),
+                accepted,
+                duplicate);
         return new WebhookAccepted(accepted, duplicate);
     }
 
