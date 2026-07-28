@@ -35,6 +35,8 @@ public class KnowledgeService {
 
     private static final Pattern LATIN_WORD = Pattern.compile("[a-z0-9]+");
     private static final Pattern CJK_CHAR = Pattern.compile("[\\u3400-\\u9fff]");
+    private static final List<List<String>> RETRIEVAL_SYNONYM_GROUPS = List.of(
+            List.of("刷卡", "信用卡", "卡片付款"));
 
     private final KnowledgeRepository repository;
     private final KnowledgeIndexer indexer;
@@ -325,6 +327,16 @@ public class KnowledgeService {
         String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC)
                 .toLowerCase(Locale.ROOT);
         Set<String> result = new HashSet<>();
+        addFeatures(normalized, result);
+        for (List<String> group : RETRIEVAL_SYNONYM_GROUPS) {
+            if (group.stream().anyMatch(normalized::contains)) {
+                group.forEach(alias -> addFeatures(alias, result));
+            }
+        }
+        return result;
+    }
+
+    private void addFeatures(String normalized, Set<String> result) {
         var words = LATIN_WORD.matcher(normalized);
         while (words.find()) {
             result.add(words.group());
@@ -338,7 +350,6 @@ public class KnowledgeService {
         for (int index = 0; index + 1 < chars.size(); index++) {
             result.add(chars.get(index) + chars.get(index + 1));
         }
-        return result;
     }
 
     private double round(double value) {

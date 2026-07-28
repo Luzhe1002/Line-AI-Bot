@@ -79,6 +79,7 @@ flowchart LR
 7. 沒有可靠資料時回覆無法確認並提供人工客服選項。
 
 Local Provider 可完全離線驗證。OpenAI Provider 使用 Embeddings 與 Responses API、`store=false`，LINE User ID 先以 HMAC 轉成不可逆穩定識別碼。模型不直接取得資料庫或預約工具權限。
+離線檢索可用小型、經測試的商務同義詞群補足常見中文問法，但正式語意召回仍應使用 OpenAI Embeddings；不以降低全域相關性門檻取代語意檢索。
 
 目前向量仍以 JSON 儲存並在應用層掃描，適合 MVP。當單一租戶 Chunk 數達數萬筆或查詢延遲不符目標時，將欄位升級為 pgvector、建立 HNSW 索引並增加 Reranker。
 

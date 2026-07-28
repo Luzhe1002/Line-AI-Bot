@@ -145,7 +145,7 @@ class ApplicationIntegrationTest {
                         .content("""
                                 {
                                   "title": "Portal policy",
-                                  "content": "Portal uploads require review before publication."
+                                  "content": "Portal uploads require review before publication. 本店接受現金及信用卡付款。"
                                 }
                                 """))
                 .andExpect(status().isForbidden())
@@ -159,7 +159,7 @@ class ApplicationIntegrationTest {
                         .content("""
                                 {
                                   "title": "Portal policy",
-                                  "content": "Portal uploads require review before publication."
+                                  "content": "Portal uploads require review before publication. 本店接受現金及信用卡付款。"
                                 }
                                 """))
                 .andExpect(status().isCreated())
@@ -178,7 +178,26 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.grounded").value(true))
                 .andExpect(jsonPath("$.dataset_id").value(datasetId))
-                .andExpect(jsonPath("$.citations[0].title").value("Portal policy"));
+                .andExpect(jsonPath("$.citations[0].title").value("Portal policy"))
+                .andExpect(jsonPath("$.citations[0].snippet")
+                        .value(org.hamcrest.Matchers.containsString("信用卡")));
+
+        mvc.perform(post("/portal/api/answer")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", datasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "可以刷卡嗎？"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.grounded").value(true))
+                .andExpect(jsonPath("$.dataset_id").value(datasetId))
+                .andExpect(jsonPath("$.citations[0].title").value("Portal policy"))
+                .andExpect(jsonPath("$.citations[0].snippet")
+                        .value(org.hamcrest.Matchers.containsString("信用卡")));
 
         Tenant otherTenant = createTenant("portal-preview-other");
         String otherDatasetId = firstId(getJson(
