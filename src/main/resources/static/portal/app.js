@@ -187,7 +187,9 @@ $$("[data-auth-tab]").forEach((button) => button.addEventListener("click", () =>
 
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "登入中…");
   try {
     const session = await api("/session", {
       method: "POST",
@@ -195,9 +197,13 @@ $("#login-form").addEventListener("submit", async (event) => {
     });
     state.csrfToken = session.csrf_token;
     state.tenant = session.tenant;
-    event.currentTarget.reset();
+    form.reset();
     await enterApp();
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "登入中…");
+  }
 });
 
 $("#onboard-form").addEventListener("submit", async (event) => {
@@ -261,9 +267,11 @@ $("#dataset-select").addEventListener("change", (event) => loadDocuments(event.t
 
 $("#document-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
   const datasetId = $("#dataset-select").value;
   if (!datasetId) return toast("請先建立資料集", true);
+  setSubmitting(form, true, "加入並索引中…");
   try {
     await api(`/documents?datasetId=${encodeURIComponent(datasetId)}`, {
       method: "POST",
@@ -273,11 +281,15 @@ $("#document-form").addEventListener("submit", async (event) => {
         source_url: data.source_url || null,
       }),
     });
-    event.currentTarget.reset();
+    form.reset();
     await loadDocuments(datasetId);
     renderOverview();
     toast("文件已加入並完成索引");
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "加入並索引中…");
+  }
 });
 
 $("#upload-button").addEventListener("click", async () => {
@@ -301,7 +313,9 @@ $("#upload-button").addEventListener("click", async () => {
 
 $("#answer-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "產生回答中…");
   try {
     const result = await api("/answer", {
       method: "POST",
@@ -315,12 +329,18 @@ $("#answer-form").addEventListener("submit", async (event) => {
       <p class="eyebrow">AI RESPONSE · 信心 ${Math.round(result.confidence * 100)}%</p>
       <p class="answer-text">${escapeHtml(result.answer)}</p>
       ${citations || '<div class="citation">沒有引用來源，系統已採取保守回覆。</div>'}`;
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "產生回答中…");
+  }
 });
 
 $("#line-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "儲存中…");
   try {
     await api("/line-channel", {
       method: "PUT",
@@ -330,10 +350,14 @@ $("#line-form").addEventListener("submit", async (event) => {
         enabled: data.enabled === "on",
       }),
     });
-    event.currentTarget.reset();
+    form.reset();
     await refreshOverview();
     toast("LINE Channel 已安全保存");
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "儲存中…");
+  }
 });
 
 $("#publish-button").addEventListener("click", async () => {
