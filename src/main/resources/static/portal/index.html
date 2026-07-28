@@ -91,6 +91,23 @@
         <span id="system-pill" class="status-pill">讀取中</span>
       </header>
 
+      <section id="tenant-key-notice" class="credential-notice hidden" aria-live="polite">
+        <div>
+          <p class="eyebrow">SAVE YOUR LOGIN KEY</p>
+          <h2>請立即保存商家登入金鑰</h2>
+          <p>Tenant ID 與 Tenant Admin API Key 之後登入商家工作台時都會用到；API Key 只顯示這一次。</p>
+          <div class="credential-row">
+            <strong>Tenant ID</strong>
+            <code id="tenant-login-id"></code>
+          </div>
+          <div class="copy-field">
+            <code id="tenant-api-key"></code>
+            <button id="copy-tenant-key" class="secondary" type="button">複製登入資料</button>
+          </div>
+        </div>
+        <button id="dismiss-tenant-key" class="text-button" type="button">我已安全保存</button>
+      </section>
+
       <section id="view-overview" class="view">
         <div class="hero-grid">
           <article class="progress-card">

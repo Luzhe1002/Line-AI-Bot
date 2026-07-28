@@ -186,6 +186,37 @@ class ApplicationIntegrationTest {
     }
 
     @Test
+    void merchantOnboardingReturnsTheTenantApiKeyOnlyInTheCreationResponse()
+            throws Exception {
+        String slug = "portal-onboard-" + UUID.randomUUID().toString().substring(0, 8);
+        MvcResult onboard = mvc.perform(post("/portal/api/onboarding")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "platform_admin_key": "%s",
+                                  "tenant": {
+                                    "name": "Portal onboarding",
+                                    "slug": "%s",
+                                    "timezone": "Asia/Taipei",
+                                    "slot_minutes": 30
+                                  }
+                                }
+                                """
+                                .formatted(PLATFORM_KEY, slug)))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true))
+                .andExpect(jsonPath("$.tenant.slug").value(slug))
+                .andExpect(jsonPath("$.tenant_api_key").isNotEmpty())
+                .andReturn();
+
+        MockHttpSession session = (MockHttpSession) onboard.getRequest().getSession(false);
+        mvc.perform(get("/portal/api/session").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true))
+                .andExpect(jsonPath("$.tenant_api_key").doesNotExist());
+    }
+
+    @Test
     void bookingIsIdempotentAndOnlyOneCustomerCanOwnASlot() throws Exception {
         Tenant tenant = createTenant("booking");
         String serviceId = firstId(

@@ -75,7 +75,10 @@ public class PortalController {
             @NotNull @Valid TenantCreate tenant) {}
 
     public record SessionView(
-            boolean authenticated, TenantRead tenant, String csrfToken) {}
+            boolean authenticated,
+            TenantRead tenant,
+            String csrfToken,
+            String tenantApiKey) {}
 
     public record Overview(
             TenantRead tenant,
@@ -97,22 +100,22 @@ public class PortalController {
         apiAuth.requirePlatformAdmin(request.platformAdminKey());
         var created = tenants.createTenant(request.tenant());
         TenantRow tenant = tenantRepository.findById(created.id()).orElseThrow();
-        return establishSession(httpRequest, tenant);
+        return establishSession(httpRequest, tenant, created.adminApiKey());
     }
 
     @GetMapping("/session")
     SessionView session(HttpSession session) {
         Object tenantId = session.getAttribute(TENANT_ID);
         if (!(tenantId instanceof String id)) {
-            return new SessionView(false, null, null);
+            return new SessionView(false, null, null, null);
         }
         TenantRow tenant = tenantRepository.findById(id).orElse(null);
         if (tenant == null || !tenant.active()) {
             session.invalidate();
-            return new SessionView(false, null, null);
+            return new SessionView(false, null, null, null);
         }
         return new SessionView(
-                true, tenant.toRead(), (String) session.getAttribute(CSRF_TOKEN));
+                true, tenant.toRead(), (String) session.getAttribute(CSRF_TOKEN), null);
     }
 
     @DeleteMapping("/session")
@@ -273,6 +276,11 @@ public class PortalController {
 
     private SessionView establishSession(
             HttpServletRequest request, TenantRow tenant) {
+        return establishSession(request, tenant, null);
+    }
+
+    private SessionView establishSession(
+            HttpServletRequest request, TenantRow tenant, String tenantApiKey) {
         HttpSession session = request.getSession(true);
         request.changeSessionId();
         byte[] random = new byte[32];
@@ -281,7 +289,7 @@ public class PortalController {
         session.setAttribute(TENANT_ID, tenant.id());
         session.setAttribute(CSRF_TOKEN, csrfToken);
         session.setMaxInactiveInterval(8 * 60 * 60);
-        return new SessionView(true, tenant.toRead(), csrfToken);
+        return new SessionView(true, tenant.toRead(), csrfToken, tenantApiKey);
     }
 
     private TenantRow requireTenant(HttpSession session) {

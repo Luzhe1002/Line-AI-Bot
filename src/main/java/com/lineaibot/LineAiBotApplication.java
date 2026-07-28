@@ -12,6 +12,8 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 public class LineAiBotApplication {
 
     public static void main(String[] args) {
+        DatabaseUrlProperties.apply(
+                System.getenv("DATABASE_URL"), System.getenv("SPRING_DATASOURCE_URL"));
         SpringApplication.run(LineAiBotApplication.class, args);
     }
 }
