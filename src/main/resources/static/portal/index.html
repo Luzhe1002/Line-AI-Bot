@@ -95,10 +95,14 @@
         <div>
           <p class="eyebrow">SAVE YOUR LOGIN KEY</p>
           <h2>請立即保存商家登入金鑰</h2>
-          <p>這組 Tenant Admin API Key 只顯示這一次，之後登入商家工作台時會用到。</p>
+          <p>Tenant ID 與 Tenant Admin API Key 之後登入商家工作台時都會用到；API Key 只顯示這一次。</p>
+          <div class="credential-row">
+            <strong>Tenant ID</strong>
+            <code id="tenant-login-id"></code>
+          </div>
           <div class="copy-field">
             <code id="tenant-api-key"></code>
-            <button id="copy-tenant-key" class="secondary" type="button">複製金鑰</button>
+            <button id="copy-tenant-key" class="secondary" type="button">複製登入資料</button>
           </div>
         </div>
         <button id="dismiss-tenant-key" class="text-button" type="button">我已安全保存</button>

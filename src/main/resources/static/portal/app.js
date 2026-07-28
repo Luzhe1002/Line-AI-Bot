@@ -51,8 +51,9 @@ function setSubmitting(form, submitting, pendingLabel) {
   button.textContent = submitting ? pendingLabel : button.dataset.defaultLabel;
 }
 
-function showTenantApiKey(apiKey) {
+function showTenantApiKey(apiKey, tenantId) {
   if (!apiKey) return;
+  $("#tenant-login-id").textContent = tenantId;
   $("#tenant-api-key").textContent = apiKey;
   $("#tenant-key-notice").classList.remove("hidden");
 }
@@ -220,7 +221,7 @@ $("#onboard-form").addEventListener("submit", async (event) => {
     state.csrfToken = session.csrf_token;
     state.tenant = session.tenant;
     form.reset();
-    showTenantApiKey(session.tenant_api_key);
+    showTenantApiKey(session.tenant_api_key, session.tenant.id);
     await enterApp();
     toast("商家空間已建立");
   } catch (error) {
@@ -232,14 +233,17 @@ $("#onboard-form").addEventListener("submit", async (event) => {
 
 $("#copy-tenant-key").addEventListener("click", async () => {
   try {
-    await navigator.clipboard.writeText($("#tenant-api-key").textContent);
-    toast("登入金鑰已複製");
+    await navigator.clipboard.writeText(
+      `Tenant ID: ${$("#tenant-login-id").textContent}\nTenant Admin API Key: ${$("#tenant-api-key").textContent}`
+    );
+    toast("登入資料已複製");
   } catch (_) {
     toast("無法存取剪貼簿，請手動複製", true);
   }
 });
 
 $("#dismiss-tenant-key").addEventListener("click", () => {
+  $("#tenant-login-id").textContent = "";
   $("#tenant-api-key").textContent = "";
   $("#tenant-key-notice").classList.add("hidden");
 });
