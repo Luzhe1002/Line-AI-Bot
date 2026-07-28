@@ -44,6 +44,19 @@ function formData(form) {
   return Object.fromEntries(new FormData(form).entries());
 }
 
+function setSubmitting(form, submitting, pendingLabel) {
+  const button = form.querySelector('button[type="submit"]');
+  if (!button.dataset.defaultLabel) button.dataset.defaultLabel = button.textContent;
+  button.disabled = submitting;
+  button.textContent = submitting ? pendingLabel : button.dataset.defaultLabel;
+}
+
+function showTenantApiKey(apiKey) {
+  if (!apiKey) return;
+  $("#tenant-api-key").textContent = apiKey;
+  $("#tenant-key-notice").classList.remove("hidden");
+}
+
 async function restoreSession() {
   try {
     const session = await api("/session");
@@ -188,7 +201,9 @@ $("#login-form").addEventListener("submit", async (event) => {
 
 $("#onboard-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "建立商家中…");
   try {
     const session = await api("/onboarding", {
       method: "POST",
@@ -204,10 +219,29 @@ $("#onboard-form").addEventListener("submit", async (event) => {
     });
     state.csrfToken = session.csrf_token;
     state.tenant = session.tenant;
-    event.currentTarget.reset();
+    form.reset();
+    showTenantApiKey(session.tenant_api_key);
     await enterApp();
     toast("商家空間已建立");
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "建立商家中…");
+  }
+});
+
+$("#copy-tenant-key").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("#tenant-api-key").textContent);
+    toast("登入金鑰已複製");
+  } catch (_) {
+    toast("無法存取剪貼簿，請手動複製", true);
+  }
+});
+
+$("#dismiss-tenant-key").addEventListener("click", () => {
+  $("#tenant-api-key").textContent = "";
+  $("#tenant-key-notice").classList.add("hidden");
 });
 
 $("#logout-button").addEventListener("click", async () => {
