@@ -10,6 +10,13 @@ final class DatabaseUrlProperties {
 
     private DatabaseUrlProperties() {}
 
+    static void apply(String databaseUrl, String explicitDatasourceUrl) {
+        if (explicitDatasourceUrl != null && !explicitDatasourceUrl.isBlank()) {
+            return;
+        }
+        from(databaseUrl).forEach((key, value) -> System.setProperty(key, value.toString()));
+    }
+
     static Map<String, Object> from(String databaseUrl) {
         if (databaseUrl == null || databaseUrl.isBlank()) {
             return Map.of();
