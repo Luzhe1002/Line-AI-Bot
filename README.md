@@ -158,6 +158,9 @@ APP_AI_EMBEDDING_MODEL=text-embedding-3-small
 APP_AI_EMBEDDING_DIMENSIONS=512
 ```
 
+目前 Render 測試環境已使用 OpenAI Provider；`OPENAI_API_KEY` 只存於
+Render Secret，`render.yaml` 僅以 `sync: false` 宣告變數名稱。
+
 OpenAI 請求使用 `store=false`，且傳送的 LINE User ID 會先轉成穩定 HMAC 識別碼。切換 Provider、Embedding 模型或維度後，既有資料集必須呼叫：
 
 ```http

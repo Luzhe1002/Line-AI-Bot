@@ -23,7 +23,9 @@ services:
       - key: APP_SESSION_COOKIE_SECURE
         value: "true"
       - key: APP_AI_PROVIDER
-        value: local
+        value: openai
+      - key: OPENAI_API_KEY
+        sync: false
       - key: APP_LINE_API_ENABLED
         value: "true"
       - key: APP_PUBLIC_BASE_URL
