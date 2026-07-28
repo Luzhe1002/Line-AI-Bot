@@ -15,10 +15,24 @@ spring:
   jackson:
     property-naming-strategy: SNAKE_CASE
     default-property-inclusion: non_null
+  servlet:
+    multipart:
+      max-file-size: 1MB
+      max-request-size: 2MB
 
 server:
   port: ${PORT:8000}
   forward-headers-strategy: framework
+  servlet:
+    encoding:
+      charset: UTF-8
+      force-response: true
+    session:
+      timeout: 8h
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${APP_SESSION_COOKIE_SECURE:false}
 
 springdoc:
   api-docs:

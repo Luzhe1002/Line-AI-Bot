@@ -84,6 +84,36 @@ X-Tenant-Api-Key: <admin_api_key>
 
 代表 `X-Platform-Admin-Key` 沒有填入，或內容與目前 Java 程序讀到的 `.env` 不一致。修改 `.env` 後必須重新啟動容器或 Java 程序。
 
+## 商家管理工作台
+
+啟動服務後開啟：
+
+```text
+http://localhost:8000/portal/
+```
+
+工作台提供：
+
+- 以 Tenant ID 與只顯示一次的商家管理 API Key 登入。
+- 使用 Platform Admin Key 建立商家並直接進入首次設定流程。
+- 顯示 LINE、營業設定、知識文件與發布狀態的完成度。
+- 貼上知識內容，或上傳 UTF-8 TXT、Markdown、CSV（最多 100,000 字）。
+- 查看文件索引狀態、重新索引、測試 AI 回答與引用。
+- 發布資料集及設定 LINE Channel。
+
+API Key 只在登入交換時送到後端。登入後使用 HttpOnly Session Cookie，
+寫入操作另要求 Session 專用 CSRF Token；工作台不會把 API Key 寫入
+`localStorage` 或 `sessionStorage`。
+
+正式 HTTPS 環境必須設定：
+
+```dotenv
+APP_SESSION_COOKIE_SECURE=true
+```
+
+歷史客服對話不應直接索引。後續匯入流程會先做個資遮蔽、候選知識萃取與
+商家人工核准，再把核准內容加入草稿資料集。
+
 ## LINE 測試模式
 
 預設：

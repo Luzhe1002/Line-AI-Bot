@@ -1,7 +1,9 @@
 package com.lineaibot;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -30,6 +32,8 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.mock.web.MockHttpSession;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.springframework.web.context.WebApplicationContext;
 import tools.jackson.databind.JsonNode;
@@ -90,6 +94,95 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(tenant.id()))
                 .andExpect(jsonPath("$.slug").value(tenant.slug()));
+    }
+
+    @Test
+    void merchantPortalUsesSessionAndCsrfWithoutPersistingTheApiKey() throws Exception {
+        mvc.perform(get("/portal/"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .forwardedUrl("/portal/index.html"));
+        mvc.perform(get("/portal/index.html"))
+                .andExpect(status().isOk())
+                .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+                        .content()
+                        .string(org.hamcrest.Matchers.containsString(
+                                "LINE AI MERCHANT PORTAL")));
+
+        Tenant tenant = createTenant("portal");
+        MvcResult login = mvc.perform(post("/portal/api/session")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "tenant_id": "%s",
+                                  "api_key": "%s"
+                                }
+                                """
+                                .formatted(tenant.id(), tenant.apiKey())))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true))
+                .andExpect(jsonPath("$.tenant.id").value(tenant.id()))
+                .andExpect(jsonPath("$.csrf_token").isNotEmpty())
+                .andReturn();
+
+        JsonNode sessionView = json(login);
+        String csrfToken = sessionView.path("csrf_token").asText();
+        MockHttpSession session = (MockHttpSession) login.getRequest().getSession(false);
+        assertThat(session).isNotNull();
+        assertThat(java.util.Collections.list(session.getAttributeNames()))
+                .doesNotContain("apiKey", "tenantApiKey");
+
+        JsonNode overview = json(mvc.perform(get("/portal/api/overview").session(session))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenant.id").value(tenant.id()))
+                .andReturn());
+        String datasetId = overview.path("datasets").get(0).path("id").asText();
+
+        mvc.perform(post("/portal/api/documents")
+                        .session(session)
+                        .queryParam("datasetId", datasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Portal policy",
+                                  "content": "Portal uploads require review before publication."
+                                }
+                                """))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.detail").value("Invalid CSRF token"));
+
+        mvc.perform(post("/portal/api/documents")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", datasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "Portal policy",
+                                  "content": "Portal uploads require review before publication."
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.index_status").value("READY"));
+
+        MockMultipartFile file = new MockMultipartFile(
+                "file",
+                "merchant-faq.md",
+                "text/markdown",
+                "## Opening hours\nWe open at nine.".getBytes(StandardCharsets.UTF_8));
+        mvc.perform(multipart("/portal/api/documents/upload")
+                        .file(file)
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", datasetId))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.title").value("merchant-faq.md"))
+                .andExpect(jsonPath("$.index_status").value("READY"));
+
+        mvc.perform(delete("/portal/api/session").session(session))
+                .andExpect(status().isOk());
+        mvc.perform(get("/portal/api/overview").session(session))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -271,6 +364,111 @@ class ApplicationIntegrationTest {
                 .query(String.class)
                 .single();
         assertThat(outboxStatus).isEqualTo("SIMULATED");
+    }
+
+    @Test
+    void staleEventRecoveryStopsAfterThreeClaims() throws Exception {
+        Tenant tenant = createTenant("stale-event");
+        String eventId = UUID.randomUUID().toString();
+        Instant firstClaim = Instant.parse("2026-01-01T00:00:00Z");
+        lineRepository.insertEvent(
+                eventId,
+                tenant.id(),
+                "stale-webhook-event",
+                "message",
+                "U-stale",
+                "{}",
+                firstClaim.minusSeconds(1));
+
+        for (int attempt = 1; attempt <= 3; attempt++) {
+            Instant claimAt = firstClaim.plusSeconds(attempt * 10L);
+            assertThat(lineRepository.claimEvent(eventId, claimAt))
+                    .isTrue();
+            lineRepository.recoverStaleEvents(
+                    claimAt.plusSeconds(1),
+                    claimAt.plusSeconds(2));
+        }
+
+        var event = lineRepository.findEvent(eventId).orElseThrow();
+        assertThat(event.attempts()).isEqualTo(3);
+        assertThat(event.status()).isEqualTo("FAILED");
+        assertThat(lineRepository.findReadyEventIds(firstClaim.plusSeconds(10), 20))
+                .doesNotContain(eventId);
+    }
+
+    @Test
+    void retryUsesFailedReplyPayloadAsPushWithoutRegeneratingIt() throws Exception {
+        Tenant tenant = createTenant("line-push-fallback");
+        configureLineChannel(tenant);
+        String eventId = UUID.randomUUID().toString();
+        String replyToken = "expired-reply-token";
+        String originalPayload = """
+                [{"type":"text","text":"original generated answer"}]
+                """.trim();
+        String failedOutboxId = lineRepository.insertOutbox(
+                tenant.id(),
+                "U-push-user",
+                replyToken,
+                "REPLY",
+                originalPayload,
+                Instant.now().minusSeconds(10));
+        lineRepository.markOutboxFailed(failedOutboxId, "reply response timed out");
+        lineRepository.insertEvent(
+                eventId,
+                tenant.id(),
+                "push-fallback-webhook-event",
+                "message",
+                "U-push-user",
+                """
+                {
+                  "type": "message",
+                  "replyToken": "%s",
+                  "source": {"type": "user", "userId": "U-push-user"},
+                  "message": {"id": "2", "type": "text", "text": "do not regenerate"}
+                }
+                """
+                        .formatted(replyToken),
+                Instant.now().minusSeconds(5));
+        assertThat(lineRepository.claimEvent(eventId, Instant.now())).isTrue();
+        lineRepository.releaseClaim(eventId, Instant.now(), "retry");
+        assertThat(lineRepository.claimEvent(eventId, Instant.now())).isTrue();
+
+        lineEventProcessor.process(eventId);
+
+        assertThat(lineRepository.findEvent(eventId).orElseThrow().status())
+                .isEqualTo("PROCESSED");
+        var fallback = jdbc.sql("""
+                        select delivery_type, reply_token, payload_json, status
+                        from outbox_messages
+                        where tenant_id = :tenantId and delivery_type = 'PUSH'
+                        """)
+                .param("tenantId", tenant.id())
+                .query((rs, rowNum) -> new String[] {
+                    rs.getString("delivery_type"),
+                    rs.getString("reply_token"),
+                    rs.getString("payload_json"),
+                    rs.getString("status")
+                })
+                .single();
+        assertThat(fallback[0]).isEqualTo("PUSH");
+        assertThat(fallback[1]).isNull();
+        assertThat(fallback[2]).isEqualTo(originalPayload);
+        assertThat(fallback[3]).isEqualTo("SIMULATED");
+    }
+
+    private void configureLineChannel(Tenant tenant) throws Exception {
+        mvc.perform(put("/api/v1/tenants/{tenantId}/line-channel", tenant.id())
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "channel_secret": "%s",
+                                  "channel_access_token": "%s",
+                                  "enabled": true
+                                }
+                                """
+                                .formatted(LINE_SECRET, LINE_ACCESS_TOKEN)))
+                .andExpect(status().isOk());
     }
 
     private Tenant createTenant(String purpose) throws Exception {

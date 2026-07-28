@@ -90,7 +90,10 @@ public class LineRepository {
     public void recoverStaleEvents(Instant staleBefore, Instant retryAt) {
         jdbc.sql("""
                         update line_events
-                        set status = 'RETRY', next_attempt_at = :retryAt, locked_at = null,
+                        set status = case when attempts >= 3 then 'FAILED' else 'RETRY' end,
+                            next_attempt_at = :retryAt, locked_at = null,
+                            processed_at = case when attempts >= 3 then :retryAt
+                                                else null end,
                             error = 'Recovered stale worker claim'
                         where status = 'PROCESSING' and locked_at < :staleBefore
                         """)
@@ -211,6 +214,7 @@ public class LineRepository {
             String tenantId,
             String lineUserId,
             String replyToken,
+            String deliveryType,
             String payloadJson,
             Instant createdAt) {
         String id = UUID.randomUUID().toString();
@@ -219,7 +223,7 @@ public class LineRepository {
                             id, tenant_id, line_user_id, reply_token, delivery_type,
                             payload_json, status, attempts, error, created_at, sent_at
                         ) values (
-                            :id, :tenantId, :lineUserId, :replyToken, 'REPLY',
+                            :id, :tenantId, :lineUserId, :replyToken, :deliveryType,
                             :payloadJson, 'PENDING', 0, null, :createdAt, null
                         )
                         """)
@@ -227,10 +231,30 @@ public class LineRepository {
                 .param("tenantId", tenantId)
                 .param("lineUserId", lineUserId)
                 .param("replyToken", replyToken)
+                .param("deliveryType", deliveryType)
                 .param("payloadJson", payloadJson)
                 .param("createdAt", utc(createdAt))
                 .update();
         return id;
+    }
+
+    public Optional<String> findLatestFailedReplyPayload(
+            String tenantId, String lineUserId, String replyToken) {
+        return jdbc.sql("""
+                        select payload_json from outbox_messages
+                        where tenant_id = :tenantId
+                          and line_user_id = :lineUserId
+                          and reply_token = :replyToken
+                          and delivery_type = 'REPLY'
+                          and status = 'FAILED'
+                        order by created_at desc
+                        limit 1
+                        """)
+                .param("tenantId", tenantId)
+                .param("lineUserId", lineUserId)
+                .param("replyToken", replyToken)
+                .query(String.class)
+                .optional();
     }
 
     public void markOutboxSent(String id, String status, Instant sentAt) {
