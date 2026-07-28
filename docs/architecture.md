@@ -104,5 +104,22 @@ RabbitMQ、SQS 或 Kafka 在 API／Worker 需要獨立擴縮、持續高流量�
 - OpenAI 不取得原始 LINE User ID，且回答請求不保存。
 - 只有 `BookingManager` 可以改變預約狀態；AI 只能輸出文字。
 - Production 模式拒絕預設管理金鑰與加密金鑰。
+- 商家工作台以 Tenant API Key 換取 HttpOnly Session，API Key 不保存於瀏覽器。
+- 工作台所有資料仍由伺服器 Session 決定 `tenant_id`，不接受前端自行指定租戶。
+- 工作台寫入操作要求與 Session 綁定的 CSRF Token；正式環境 Cookie 必須啟用 Secure。
+
+## 商家工作台
+
+`/portal/` 與 Spring Boot API 同源部署，避免在第一階段增加第二套前端部署與
+跨來源權限設定。工作台透過 `/portal/api/*` Session API 呼叫既有
+`TenantService`、`KnowledgeService`，不複製商業規則。
+
+目前支援商家建立／登入、設定完成度、LINE Channel、文字與 UTF-8
+TXT／Markdown／CSV 匯入、索引、發布及回答測試。檔案大小先限制為 1 MB，
+文件內容限制為 100,000 字，並由 Spring Multipart 在進入應用邏輯前拒絕
+過大請求。
+
+歷史對話匯入會採獨立流程：檔案掃描、格式解析、個資遮蔽、候選 FAQ 萃取、
+人工核准、加入草稿、索引與發布。未核准的對話不能進入 Active Dataset。
 
 正式上線前仍需加入 Secret Manager、管理員 RBAC、限流、Metrics／Tracing、個資保存期限、備份還原演練與檔案惡意內容掃描。

@@ -28,7 +28,7 @@ public class TenantRepository {
             boolean active,
             Instant createdAt) {
 
-        TenantRead toRead() {
+        public TenantRead toRead() {
             return new TenantRead(id, name, slug, timezone, slotMinutes, active, createdAt);
         }
     }

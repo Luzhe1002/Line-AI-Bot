@@ -55,6 +55,15 @@ public class LineEventProcessor {
                 return;
             }
 
+            String token = crypto.decryptSecret(
+                    properties.getEncryptionKey(), channel.channelAccessTokenEncrypted());
+            if (event.attempts() > 1
+                    && lineClient.pushFailedReplyIfPresent(
+                            tenant.id(), token, replyToken, lineUserId)) {
+                lineRepository.markEventProcessed(eventId, Instant.now());
+                return;
+            }
+
             List<Map<String, Object>> messages;
             String eventType = payload.path("type").asText("");
             if ("message".equals(eventType)
@@ -75,8 +84,6 @@ public class LineEventProcessor {
                         "text", "目前僅支援文字訊息與預約操作。"));
             }
 
-            String token = crypto.decryptSecret(
-                    properties.getEncryptionKey(), channel.channelAccessTokenEncrypted());
             lineClient.reply(
                     tenant.id(), token, replyToken, lineUserId, messages);
             lineRepository.markEventProcessed(eventId, Instant.now());
