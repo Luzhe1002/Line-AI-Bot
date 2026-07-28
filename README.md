@@ -134,6 +134,10 @@ APP_LINE_API_ENABLED=true
 {APP_PUBLIC_BASE_URL}/webhooks/line/{tenantSlug}
 ```
 
+目前 Render 測試環境已啟用真實 LINE API，公開網址為
+`https://line-ai-bot-mj1n.onrender.com`。商家仍必須在工作台保存各自的
+Channel Secret／Access Token，並在 LINE Developers Console 啟用對應 Webhook。
+
 ## AI 與 RAG
 
 預設不需要 API Key：

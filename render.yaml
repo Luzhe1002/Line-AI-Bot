@@ -25,7 +25,9 @@ services:
       - key: APP_AI_PROVIDER
         value: local
       - key: APP_LINE_API_ENABLED
-        value: "false"
+        value: "true"
+      - key: APP_PUBLIC_BASE_URL
+        value: https://line-ai-bot-mj1n.onrender.com
 
 databases:
   - name: line-ai-bot-db
