@@ -479,6 +479,37 @@ class ApplicationIntegrationTest {
     }
 
     @Test
+    void processorRetriesWhenTenantBecomesUnavailable() throws Exception {
+        Tenant tenant = createTenant("inactive-line-event");
+        String eventId = UUID.randomUUID().toString();
+        lineRepository.insertEvent(
+                eventId,
+                tenant.id(),
+                "inactive-tenant-webhook-event",
+                "message",
+                "U-inactive",
+                """
+                {
+                  "type": "message",
+                  "replyToken": "inactive-reply-token",
+                  "source": {"type": "user", "userId": "U-inactive"},
+                  "message": {"id": "3", "type": "text", "text": "hello"}
+                }
+                """,
+                Instant.now().minusSeconds(1));
+        jdbc.sql("update tenants set active = false where id = :id")
+                .param("id", tenant.id())
+                .update();
+
+        assertThat(lineRepository.claimEvent(eventId, Instant.now())).isTrue();
+        lineEventProcessor.process(eventId);
+
+        var event = lineRepository.findEvent(eventId).orElseThrow();
+        assertThat(event.status()).isEqualTo("RETRY");
+        assertThat(event.attempts()).isEqualTo(1);
+    }
+
+    @Test
     void retryUsesFailedReplyPayloadAsPushWithoutRegeneratingIt() throws Exception {
         Tenant tenant = createTenant("line-push-fallback");
         configureLineChannel(tenant);

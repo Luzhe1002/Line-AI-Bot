@@ -43,19 +43,28 @@ public class LineEventProcessor {
     }
 
     public void process(String eventId) {
-        var event = lineRepository.findEvent(eventId).orElseThrow();
-        var tenant = tenantRepository.findById(event.tenantId())
-                .filter(TenantRepository.TenantRow::active)
-                .orElseThrow(() -> new IllegalStateException("Tenant is unavailable"));
-        var channel = tenantRepository.findLineChannel(tenant.id())
-                .filter(TenantRepository.LineChannelRow::enabled)
-                .orElseThrow(() -> new IllegalStateException("LINE channel is unavailable"));
+        var event = lineRepository.findEvent(eventId).orElse(null);
+        if (event == null) {
+            log.warn("LINE event disappeared before processing eventId={}", eventId);
+            return;
+        }
         try {
+            var tenant = tenantRepository.findById(event.tenantId())
+                    .filter(TenantRepository.TenantRow::active)
+                    .orElseThrow(() -> new IllegalStateException("Tenant is unavailable"));
+            var channel = tenantRepository.findLineChannel(tenant.id())
+                    .filter(TenantRepository.LineChannelRow::enabled)
+                    .orElseThrow(() -> new IllegalStateException("LINE channel is unavailable"));
             JsonNode payload = objectMapper.readTree(event.payloadJson());
             String lineUserId = payload.path("source").path("userId").asText("");
             String replyToken = payload.path("replyToken").asText("");
             if (lineUserId.isBlank() || replyToken.isBlank()) {
                 lineRepository.markEventProcessed(eventId, Instant.now());
+                log.info(
+                        "LINE event ignored without reply context eventId={} tenantId={} type={}",
+                        eventId,
+                        event.tenantId(),
+                        event.eventType());
                 return;
             }
 

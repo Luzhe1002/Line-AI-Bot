@@ -8,10 +8,14 @@ import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.Semaphore;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 
 @Component
 public class LineEventWorker {
+
+    private static final Logger log = LoggerFactory.getLogger(LineEventWorker.class);
 
     private final LineRepository repository;
     private final LineEventProcessor processor;
@@ -48,10 +52,23 @@ public class LineEventWorker {
                 permits.release();
                 continue;
             }
+            log.info("LINE event claimed eventId={}", eventId);
             try {
                 executor.execute(() -> {
                     try {
                         processor.process(eventId);
+                    } catch (RuntimeException exception) {
+                        log.error(
+                                "LINE event task crashed eventId={} errorType={} message={}",
+                                eventId,
+                                exception.getClass().getSimpleName(),
+                                exception.getMessage());
+                        repository.releaseClaim(
+                                eventId,
+                                Instant.now().plusSeconds(5),
+                                exception.getMessage() == null
+                                        ? exception.getClass().getSimpleName()
+                                        : exception.getMessage());
                     } finally {
                         permits.release();
                     }
