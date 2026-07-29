@@ -28,6 +28,11 @@ public final class KnowledgeDtos {
             @NotBlank @Size(max = 100_000) String content,
             @Size(max = 1024) String sourceUrl) {}
 
+    public record KnowledgeDocumentUpdate(
+            @NotBlank @Size(max = 240) String title,
+            @NotBlank @Size(max = 100_000) String content,
+            @Size(max = 1024) String sourceUrl) {}
+
     public record KnowledgeDocumentRead(
             String id,
             String tenantId,

@@ -98,8 +98,11 @@ http://localhost:8000/portal/
 - 使用 Platform Admin Key 建立商家並直接進入首次設定流程。
 - 顯示 LINE、營業設定、知識文件與發布狀態的完成度。
 - 貼上知識內容，或上傳 UTF-8 TXT、Markdown、CSV（最多 100,000 字）。
-- 查看文件索引狀態、重新索引、測試 AI 回答與引用。
+- 查看文件索引狀態、編輯或刪除草稿文件、重新索引、測試 AI 回答與引用。
 - 發布資料集及設定 LINE Channel。
+
+已發布的資料集是唯讀快照。若在正式版畫面新增內容，工作台會自動複製成
+下一版草稿；編輯與刪除只影響草稿，直到再次發布才會取代 LINE 使用中的版本。
 
 API Key 只在登入交換時送到後端。登入後使用 HttpOnly Session Cookie，
 寫入操作另要求 Session 專用 CSRF Token；工作台不會把 API Key 寫入
@@ -146,7 +149,8 @@ Channel Secret／Access Token，並在 LINE Developers Console 啟用對應 Webh
 APP_AI_PROVIDER=local
 ```
 
-本機模式用可重現的雜湊向量及擷取式回答，適合測試索引、租戶隔離、引用與 LINE 流程，不等同正式語意模型。
+本機模式用可重現的雜湊向量及句子級擷取式回答，會只選取與問題最相關的一句，
+適合測試索引、租戶隔離、引用與 LINE 流程，不等同正式語意模型。
 
 啟用 OpenAI：
 
@@ -218,7 +222,10 @@ docker compose config --quiet
 | `GET /api/v1/tenants/{id}/availability` | 查詢指定日期可預約時段 |
 | `POST /api/v1/tenants/{id}/reservations` | 建立預約 |
 | `POST /api/v1/tenants/{id}/reservations/{id}/cancel` | 取消預約 |
+| `POST /api/v1/tenants/{id}/datasets/{id}/draft` | 從已發布版本建立下一版草稿 |
 | `POST /api/v1/tenants/{id}/datasets/{id}/documents` | 新增並索引客服資料 |
+| `PUT /api/v1/tenants/{id}/datasets/{id}/documents/{documentId}` | 編輯草稿文件並重新索引 |
+| `DELETE /api/v1/tenants/{id}/datasets/{id}/documents/{documentId}` | 刪除草稿文件 |
 | `POST /api/v1/tenants/{id}/datasets/{id}/reindex` | 重建資料集向量 |
 | `POST /api/v1/tenants/{id}/datasets/{id}/publish` | 發布資料集 |
 | `POST /api/v1/tenants/{id}/ai/answer` | 測試知識庫回答 |

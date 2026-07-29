@@ -195,6 +195,8 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.grounded").value(true))
                 .andExpect(jsonPath("$.dataset_id").value(datasetId))
+                .andExpect(jsonPath("$.answer")
+                        .value("本店接受現金及信用卡付款。"))
                 .andExpect(jsonPath("$.citations[0].title").value("Portal policy"))
                 .andExpect(jsonPath("$.citations[0].snippet")
                         .value(org.hamcrest.Matchers.containsString("信用卡")));
@@ -234,6 +236,101 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/portal/api/overview").session(session))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void publishedKnowledgeCanBeCopiedEditedAndDeletedInANewDraft()
+            throws Exception {
+        Tenant tenant = createTenant("knowledge-edit");
+        String datasetId = firstId(getJson(
+                "/api/v1/tenants/" + tenant.id() + "/datasets",
+                tenant.apiKey()));
+
+        MvcResult created = mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "付款方式",
+                                  "content": "本店接受現金及信用卡付款。"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String activeDocumentId = json(created).path("id").asText();
+
+        mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/publish",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isOk());
+
+        mvc.perform(put(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents/{documentId}",
+                                tenant.id(),
+                                datasetId,
+                                activeDocumentId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "不應修改",
+                                  "content": "正式版不可直接修改。"
+                                }
+                                """))
+                .andExpect(status().isConflict());
+
+        JsonNode draft = json(mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/draft",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.version").value(2))
+                .andReturn());
+        String draftId = draft.path("id").asText();
+
+        JsonNode draftDocuments = getJson(
+                "/api/v1/tenants/" + tenant.id() + "/datasets/" + draftId + "/documents",
+                tenant.apiKey());
+        assertThat(draftDocuments).hasSize(1);
+        String draftDocumentId = draftDocuments.get(0).path("id").asText();
+        assertThat(draftDocumentId).isNotEqualTo(activeDocumentId);
+
+        mvc.perform(put(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents/{documentId}",
+                                tenant.id(),
+                                draftId,
+                                draftDocumentId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "付款方式（更新）",
+                                  "content": "本店接受現金、信用卡及行動支付。"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("付款方式（更新）"))
+                .andExpect(jsonPath("$.index_status").value("READY"));
+
+        mvc.perform(delete(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents/{documentId}",
+                                tenant.id(),
+                                draftId,
+                                draftDocumentId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isNoContent());
+
+        assertThat(getJson(
+                        "/api/v1/tenants/" + tenant.id() + "/datasets/" + draftId + "/documents",
+                        tenant.apiKey()))
+                .isEmpty();
     }
 
     @Test

@@ -7,8 +7,10 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.text.Normalizer;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Component;
 
@@ -17,6 +19,10 @@ public class LocalAiProvider implements AiProvider {
 
     private static final Pattern LATIN_WORD = Pattern.compile("[a-z0-9]+");
     private static final Pattern CJK_CHAR = Pattern.compile("[\\u3400-\\u9fff]");
+    private static final Pattern SENTENCE_BOUNDARY =
+            Pattern.compile("(?<=[。！？；;])|(?<=[.!?])\\s+|\\R+");
+    private static final List<List<String>> ANSWER_SYNONYM_GROUPS = List.of(
+            List.of("刷卡", "信用卡", "卡片付款"));
 
     private final AppProperties properties;
 
@@ -41,7 +47,7 @@ public class LocalAiProvider implements AiProvider {
 
     @Override
     public String generationModel() {
-        return "local-extractive-v1";
+        return "local-extractive-v2";
     }
 
     @Override
@@ -59,8 +65,65 @@ public class LocalAiProvider implements AiProvider {
             throw new IllegalArgumentException(
                     "Cannot generate a grounded answer without context");
         }
-        return new GeneratedText(
-                contexts.getFirst().content().strip(), name(), generationModel(), null);
+        Set<String> questionFeatures = answerFeatures(question);
+        String bestSentence = "";
+        double bestScore = -1;
+        for (GroundingContext context : contexts) {
+            for (String candidate : SENTENCE_BOUNDARY.split(context.content())) {
+                String sentence = candidate.strip();
+                if (sentence.isEmpty()) {
+                    continue;
+                }
+                Set<String> sentenceFeatures = answerFeatures(sentence);
+                Set<String> overlap = new HashSet<>(questionFeatures);
+                overlap.retainAll(sentenceFeatures);
+                double score = overlap.isEmpty()
+                        ? 0
+                        : overlap.size()
+                                / Math.sqrt(questionFeatures.size()
+                                        * Math.max(1.0, sentenceFeatures.size()));
+                if (score > bestScore) {
+                    bestScore = score;
+                    bestSentence = sentence;
+                }
+            }
+        }
+        if (bestSentence.isBlank()) {
+            bestSentence = contexts.getFirst().content().strip();
+        }
+        if (bestSentence.length() > 180) {
+            bestSentence = bestSentence.substring(0, 177).stripTrailing() + "…";
+        }
+        return new GeneratedText(bestSentence, name(), generationModel(), null);
+    }
+
+    private Set<String> answerFeatures(String value) {
+        String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC)
+                .toLowerCase(Locale.ROOT);
+        Set<String> result = new HashSet<>();
+        addAnswerFeatures(normalized, result);
+        for (List<String> group : ANSWER_SYNONYM_GROUPS) {
+            if (group.stream().anyMatch(normalized::contains)) {
+                group.forEach(alias -> addAnswerFeatures(alias, result));
+            }
+        }
+        return result;
+    }
+
+    private void addAnswerFeatures(String normalized, Set<String> result) {
+        var wordMatcher = LATIN_WORD.matcher(normalized);
+        while (wordMatcher.find()) {
+            result.add(wordMatcher.group());
+        }
+        List<String> chars = new ArrayList<>();
+        var cjkMatcher = CJK_CHAR.matcher(normalized);
+        while (cjkMatcher.find()) {
+            chars.add(cjkMatcher.group());
+            result.add(cjkMatcher.group());
+        }
+        for (int index = 0; index + 1 < chars.size(); index++) {
+            result.add(chars.get(index) + chars.get(index + 1));
+        }
     }
 
     private double[] embedding(String value) {

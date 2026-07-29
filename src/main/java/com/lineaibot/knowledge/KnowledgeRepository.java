@@ -106,6 +106,31 @@ public class KnowledgeRepository {
                 .list();
     }
 
+    public Optional<DatasetRead> findDraftDataset(String tenantId, String name) {
+        return jdbc.sql("""
+                        select * from datasets
+                        where tenant_id = :tenantId and name = :name and status = 'DRAFT'
+                        order by version desc
+                        limit 1
+                        """)
+                .param("tenantId", tenantId)
+                .param("name", name)
+                .query(this::mapDataset)
+                .optional();
+    }
+
+    public int nextDatasetVersion(String tenantId, String name) {
+        return jdbc.sql("""
+                        select coalesce(max(version), 0) + 1
+                        from datasets
+                        where tenant_id = :tenantId and name = :name
+                        """)
+                .param("tenantId", tenantId)
+                .param("name", name)
+                .query(Integer.class)
+                .single();
+    }
+
     public void insertDocument(DocumentRow document, Instant createdAt) {
         jdbc.sql("""
                         insert into knowledge_documents (
@@ -134,6 +159,21 @@ public class KnowledgeRepository {
                 .optional();
     }
 
+    public Optional<DocumentRow> findDocument(
+            String tenantId, String datasetId, String documentId) {
+        return jdbc.sql("""
+                        select * from knowledge_documents
+                        where tenant_id = :tenantId
+                          and dataset_id = :datasetId
+                          and id = :documentId
+                        """)
+                .param("tenantId", tenantId)
+                .param("datasetId", datasetId)
+                .param("documentId", documentId)
+                .query(this::mapDocument)
+                .optional();
+    }
+
     public List<DocumentRow> findDocuments(String tenantId, String datasetId) {
         return jdbc.sql("""
                         select * from knowledge_documents
@@ -144,6 +184,48 @@ public class KnowledgeRepository {
                 .param("datasetId", datasetId)
                 .query(this::mapDocument)
                 .list();
+    }
+
+    public void updateDocument(
+            String tenantId,
+            String datasetId,
+            String documentId,
+            String title,
+            String content,
+            String sourceUrl) {
+        jdbc.sql("""
+                        update knowledge_documents
+                        set title = :title,
+                            content = :content,
+                            source_url = :sourceUrl,
+                            content_hash = null,
+                            index_status = 'PENDING',
+                            index_error = null,
+                            indexed_at = null
+                        where tenant_id = :tenantId
+                          and dataset_id = :datasetId
+                          and id = :documentId
+                        """)
+                .param("title", title)
+                .param("content", content)
+                .param("sourceUrl", sourceUrl)
+                .param("tenantId", tenantId)
+                .param("datasetId", datasetId)
+                .param("documentId", documentId)
+                .update();
+    }
+
+    public void deleteDocument(String tenantId, String datasetId, String documentId) {
+        jdbc.sql("""
+                        delete from knowledge_documents
+                        where tenant_id = :tenantId
+                          and dataset_id = :datasetId
+                          and id = :documentId
+                        """)
+                .param("tenantId", tenantId)
+                .param("datasetId", datasetId)
+                .param("documentId", documentId)
+                .update();
     }
 
     public void markDocumentIndexing(String documentId) {

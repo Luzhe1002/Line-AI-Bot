@@ -6,6 +6,7 @@ import com.lineaibot.knowledge.KnowledgeDtos.DatasetCreate;
 import com.lineaibot.knowledge.KnowledgeDtos.DatasetRead;
 import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentCreate;
 import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentRead;
+import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentUpdate;
 import com.lineaibot.knowledge.KnowledgeDtos.ReindexResponse;
 import com.lineaibot.knowledge.KnowledgeService;
 import com.lineaibot.shared.ApiAuthService;
@@ -172,6 +173,16 @@ public class PortalController {
         return knowledge.createDataset(requireTenant(session), request);
     }
 
+    @PostMapping("/datasets/draft")
+    @ResponseStatus(HttpStatus.CREATED)
+    DatasetRead createDraft(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @RequestParam String datasetId) {
+        requireCsrf(session, csrfToken);
+        return knowledge.createDraftFromDataset(requireTenant(session), datasetId);
+    }
+
     @GetMapping("/documents")
     List<KnowledgeDocumentRead> documents(
             HttpSession session, @RequestParam String datasetId) {
@@ -187,6 +198,29 @@ public class PortalController {
             @Valid @RequestBody KnowledgeDocumentCreate request) {
         requireCsrf(session, csrfToken);
         return knowledge.addDocument(requireTenant(session), datasetId, request);
+    }
+
+    @PutMapping("/documents")
+    KnowledgeDocumentRead updateDocument(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @RequestParam String datasetId,
+            @RequestParam String documentId,
+            @Valid @RequestBody KnowledgeDocumentUpdate request) {
+        requireCsrf(session, csrfToken);
+        return knowledge.updateDocument(
+                requireTenant(session), datasetId, documentId, request);
+    }
+
+    @DeleteMapping("/documents")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void deleteDocument(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @RequestParam String datasetId,
+            @RequestParam String documentId) {
+        requireCsrf(session, csrfToken);
+        knowledge.deleteDocument(requireTenant(session), datasetId, documentId);
     }
 
     @PostMapping("/documents/upload")

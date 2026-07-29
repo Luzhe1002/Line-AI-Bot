@@ -132,11 +132,14 @@
         </div>
         <div class="content-grid">
           <form id="document-form" class="panel stack">
-            <div><p class="eyebrow">NEW SOURCE</p><h3>新增知識文件</h3></div>
+            <div><p class="eyebrow" id="document-form-eyebrow">NEW SOURCE</p><h3 id="document-form-title">新增知識文件</h3></div>
             <label>標題<input name="title" required maxlength="240" placeholder="例如：取消與改期政策"></label>
             <label>內容<textarea name="content" required maxlength="100000" rows="10" placeholder="貼上已確認、可公開提供給顧客的內容"></textarea></label>
             <label>來源網址（選填）<input name="source_url" type="url" maxlength="1024"></label>
-            <button class="primary" type="submit">加入草稿並索引</button>
+            <div class="action-row">
+              <button id="document-submit" class="primary" type="submit">加入草稿並索引</button>
+              <button id="cancel-document-edit" class="secondary hidden" type="button">取消編輯</button>
+            </div>
             <div class="upload-divider"><span>或匯入檔案</span></div>
             <label>TXT、Markdown 或 CSV（UTF-8，最多 100,000 字）
               <input id="knowledge-file" type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv">

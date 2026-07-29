@@ -99,6 +99,8 @@ input:focus, textarea:focus, select:focus { border-color: var(--green-2); box-sh
 .document-item { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: white; }
 .document-item-head { display: flex; justify-content: space-between; gap: 16px; }
 .document-item p { margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.5; }
+.document-actions { display: flex; align-items: center; gap: 16px; margin-top: 12px; color: var(--muted); }
+.document-actions .danger { color: #9f3826; }
 .badge { padding: 5px 8px; border-radius: 999px; background: var(--mint); color: var(--green); font-size: 10px; font-weight: 900; }
 .badge.failed { background: #fae1da; color: #9b3d29; }
 .empty-state { padding: 48px 20px; color: var(--muted); text-align: center; }
