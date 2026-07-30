@@ -45,7 +45,8 @@ public class PublicBookingController {
     @GetMapping("/bootstrap")
     PublicBookingBootstrap bootstrap(
             @PathVariable String tenantSlug,
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization) {
+            @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false)
+                    String authorization) {
         var tenant = requireTenant(tenantSlug, authorization);
         return new PublicBookingBootstrap(
                 tenant.name(),
@@ -61,7 +62,8 @@ public class PublicBookingController {
     @GetMapping("/availability")
     AvailabilityResponse availability(
             @PathVariable String tenantSlug,
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false)
+                    String authorization,
             @RequestParam(name = "service_id") String serviceId,
             @RequestParam(name = "local_date") LocalDate localDate) {
         var tenant = requireTenant(tenantSlug, authorization);
@@ -77,7 +79,8 @@ public class PublicBookingController {
     @ResponseStatus(HttpStatus.CREATED)
     ReservationRead createReservation(
             @PathVariable String tenantSlug,
-            @RequestHeader(HttpHeaders.AUTHORIZATION) String authorization,
+            @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false)
+                    String authorization,
             @Valid @RequestBody PublicReservationCreate request) {
         var identity = accessTokens.require(tenantSlug, bearer(authorization));
         var tenant = requireMatchingTenant(identity);

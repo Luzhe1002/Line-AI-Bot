@@ -431,6 +431,10 @@ class ApplicationIntegrationTest {
 
         mvc.perform(get("/booking/{tenantSlug}", tenant.slug()))
                 .andExpect(status().isOk());
+        mvc.perform(get("/booking/index.html"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/booking/app.js"))
+                .andExpect(status().isOk());
         mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug())
                         .header("Authorization", authorization))
                 .andExpect(status().isOk())
@@ -474,6 +478,8 @@ class ApplicationIntegrationTest {
 
         mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug())
                         .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug()))
                 .andExpect(status().isUnauthorized());
     }
 
