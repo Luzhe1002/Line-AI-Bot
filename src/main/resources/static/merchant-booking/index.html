@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>店家預約管理</title>
+  <link rel="stylesheet" href="/merchant-booking/styles.css">
+  <script src="/merchant-booking/app.js" defer></script>
+</head>
+<body>
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <main class="shell">
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">LINE MERCHANT BOOKING</p>
+        <h1 id="tenant-name">載入預約中…</h1>
+        <p id="staff-name" class="muted"></p>
+      </div>
+      <span id="role-badge" class="badge">驗證中</span>
+    </header>
+
+    <section id="error-panel" class="panel error hidden">
+      <h2>無法開啟管理頁</h2>
+      <p id="error-message">請回到 LINE，重新點擊「開啟預約月曆」。</p>
+    </section>
+
+    <div id="app-content" class="hidden">
+      <section class="date-toolbar panel">
+        <button id="previous-day" class="icon-button" type="button" aria-label="前一天">‹</button>
+        <label>查看日期<input id="agenda-date" type="date"></label>
+        <button id="next-day" class="icon-button" type="button" aria-label="後一天">›</button>
+        <button id="today-button" class="secondary" type="button">今天</button>
+      </section>
+
+      <section class="summary-grid">
+        <article class="metric"><span>已確認</span><strong id="confirmed-count">0</strong></article>
+        <article class="metric"><span>已取消</span><strong id="cancelled-count">0</strong></article>
+        <article class="metric"><span>封鎖時段</span><strong id="blocked-count">0</strong></article>
+      </section>
+
+      <section class="section">
+        <div class="section-heading">
+          <div><p class="eyebrow">AGENDA</p><h2 id="agenda-title">當日預約</h2></div>
+          <button id="refresh-button" class="secondary" type="button">重新整理</button>
+        </div>
+        <div id="reservation-list" class="card-list"></div>
+      </section>
+
+      <section id="block-section" class="section">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">BLOCK A SLOT</p>
+            <h2>暫停開放時段</h2>
+            <p class="muted">封鎖後顧客將無法預約該時段。</p>
+          </div>
+        </div>
+        <form id="block-form" class="panel form-grid">
+          <label>日期<input id="block-date" type="date" required></label>
+          <label>可封鎖時段<select id="block-slot" required><option value="">請先選日期</option></select></label>
+          <label class="wide">原因（選填）<input id="block-reason" maxlength="500" placeholder="例如：內部會議"></label>
+          <button class="primary wide" type="submit">封鎖這個時段</button>
+        </form>
+      </section>
+
+      <section class="section">
+        <div class="section-heading"><div><p class="eyebrow">BLOCKED</p><h2>已封鎖時段</h2></div></div>
+        <div id="block-list" class="card-list"></div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

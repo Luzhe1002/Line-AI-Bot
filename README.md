@@ -12,6 +12,8 @@
 - Webhook 先持久化至 `line_events`，再由有界並行的 Java 21 Virtual Thread Worker 處理。
 - 每個商家同一時段只能有一筆有效預約，支援冪等建立與取消後釋放時段。
 - LINE 文字意圖、預約／取消 Postback、Quick Reply、人工客服工單。
+- 店家人員 LINE 綁定、預約查詢、主動通知、取消確認、每日摘要及手機月曆。
+- 預約與店家封鎖共用資料庫時段占用限制，避免並行操作造成重複占用。
 - 商家知識庫草稿、索引、重新索引、發布、租戶限定檢索及引用。
 - 本機離線 AI Provider；可選 OpenAI Embeddings 與 Responses API。
 - LINE Outbox 稽核；開發模式可模擬傳送，不呼叫 LINE。
@@ -100,6 +102,7 @@ http://localhost:8000/portal/
 - 貼上知識內容，或上傳 UTF-8 TXT、Markdown、CSV（最多 100,000 字）。
 - 查看文件索引狀態、編輯或刪除草稿文件、重新索引、測試 AI 回答與引用。
 - 發布資料集及設定 LINE Channel。
+- 產生一次性店家人員綁定碼、設定 OWNER／MANAGER／VIEWER 權限及通知偏好。
 
 已發布的資料集是唯讀快照。若在正式版畫面新增內容，工作台會自動複製成
 下一版草稿；編輯與刪除只影響草稿，直到再次發布才會取代 LINE 使用中的版本。
@@ -113,6 +116,32 @@ API Key 只在登入交換時送到後端。登入後使用 HttpOnly Session Coo
 ```dotenv
 APP_SESSION_COOKIE_SECURE=true
 ```
+
+## 店家在 LINE 管理預約
+
+不需要另外建立一個店家專用 LINE 官方帳號。每個商家沿用目前提供顧客服務的
+官方帳號，店家人員以自己的私人 LINE 加入該帳號並完成權限綁定。Webhook
+會先以 `tenant_id + LINE User ID` 判斷是否為已授權人員；只有明確的店家
+管理指令會進入管理流程，其他訊息仍可走一般客服流程。
+
+首次設定：
+
+1. 在 `/portal/` 的「店家人員」頁產生十分鐘有效、只能使用一次的綁定碼。
+2. 店家人員用私人 LINE 在商家官方帳號聊天室傳送 `綁定 <綁定碼>`。
+3. 綁定完成後輸入 `管理預約`、`今日預約`、`明日預約` 或 `本週預約`。
+
+日常操作：
+
+- 新預約與取消預約會透過可靠的 `booking_events` Worker 主動通知已啟用人員。
+- 店家從 LINE 預約清單執行取消時，必須再次確認；實際異動仍由
+  `BookingManager` 執行，並通知顧客。
+- 「開啟預約月曆」使用十分鐘有效、單次交換的管理憑證。憑證交換成
+  HttpOnly Session 後立即從網址移除，寫入操作另要求 CSRF Token。
+- OWNER／MANAGER 可以封鎖或解除時段；VIEWER 只能查看。
+- 啟用每日摘要後，系統會依商家時區在指定時間推送當日預約。
+
+顧客輸入「預約」時，LINE 只提供「開啟預約頁」。系統不再用時段 Quick
+Reply 直接建立無姓名預約；顧客必須在預約頁選擇時段並填寫姓名。
 
 歷史客服對話不應直接索引。後續匯入流程會先做個資遮蔽、候選知識萃取與
 商家人工核准，再把核准內容加入草稿資料集。
@@ -200,7 +229,9 @@ docker build --target test .
 docker compose config --quiet
 ```
 
-測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、知識庫隔離、LINE 原始 Body 簽章、事件去重及模擬 Outbox。
+測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、
+店家人員綁定、LINE 預約查詢與取消、通知事件、單次管理 Session、封鎖時段、
+知識庫隔離、LINE 原始 Body 簽章、事件去重及模擬 Outbox。
 
 原 FastAPI 驗證仍可另外執行，但只代表舊版參考實作：
 

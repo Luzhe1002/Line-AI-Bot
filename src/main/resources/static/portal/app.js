@@ -3,6 +3,7 @@ const state = {
   tenant: null,
   overview: null,
   documents: [],
+  staff: [],
   editingDocumentId: null,
   activeView: "overview",
 };
@@ -82,6 +83,7 @@ async function enterApp() {
   $("#app-view").classList.remove("hidden");
   $("#merchant-mini").innerHTML = `<strong>${escapeHtml(state.tenant.name)}</strong><br><small>${escapeHtml(state.tenant.slug)}</small>`;
   await refreshOverview();
+  await loadStaff();
 }
 
 async function refreshOverview() {
@@ -218,6 +220,49 @@ function renderSettings() {
     : "尚未連接 LINE Channel";
 }
 
+async function loadStaff() {
+  state.staff = await api("/staff");
+  renderStaff();
+}
+
+function renderStaff() {
+  const list = $("#staff-list");
+  if (!state.staff.length) {
+    list.innerHTML = `<div class="empty-state"><strong>尚未綁定店家人員</strong><p>先產生擁有者綁定碼，再到 LINE 完成綁定。</p></div>`;
+    return;
+  }
+  list.innerHTML = state.staff.map((staff) => `
+    <article class="staff-item" data-staff-id="${staff.id}">
+      <div class="staff-item-head">
+        <div><strong>${escapeHtml(staff.display_name)}</strong><br><small>${new Date(staff.created_at).toLocaleString("zh-TW")}</small></div>
+        <span class="badge ${staff.status === "ACTIVE" ? "" : "failed"}">${staff.status}</span>
+      </div>
+      <div class="staff-fields">
+        <label>顯示名稱<input data-staff-field="display_name" maxlength="160" value="${escapeHtml(staff.display_name)}"></label>
+        <label>權限
+          <select data-staff-field="role">
+            <option value="OWNER" ${staff.role === "OWNER" ? "selected" : ""}>擁有者</option>
+            <option value="MANAGER" ${staff.role === "MANAGER" ? "selected" : ""}>管理員</option>
+            <option value="VIEWER" ${staff.role === "VIEWER" ? "selected" : ""}>檢視者</option>
+          </select>
+        </label>
+        <label>狀態
+          <select data-staff-field="status">
+            <option value="ACTIVE" ${staff.status === "ACTIVE" ? "selected" : ""}>啟用</option>
+            <option value="DISABLED" ${staff.status === "DISABLED" ? "selected" : ""}>停用</option>
+          </select>
+        </label>
+        <label>每日摘要時間<input data-staff-field="daily_summary_time" type="time" value="${escapeHtml((staff.daily_summary_time || "08:00").slice(0, 5))}"></label>
+      </div>
+      <div class="staff-checks">
+        <label><input data-staff-field="notify_new_booking" type="checkbox" ${staff.notify_new_booking ? "checked" : ""}>新預約通知</label>
+        <label><input data-staff-field="notify_cancellation" type="checkbox" ${staff.notify_cancellation ? "checked" : ""}>取消預約通知</label>
+        <label><input data-staff-field="daily_summary_enabled" type="checkbox" ${staff.daily_summary_enabled ? "checked" : ""}>每日預約摘要</label>
+      </div>
+      <div class="staff-item-actions"><button class="primary compact" data-save-staff type="button">儲存設定</button></div>
+    </article>`).join("");
+}
+
 function switchView(name) {
   state.activeView = name;
   $$(".view").forEach((view) => view.classList.add("hidden"));
@@ -227,6 +272,7 @@ function switchView(name) {
     overview: ["MERCHANT OVERVIEW", "今天，讓客服再可靠一點。"],
     knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。"],
     tester: ["ANSWER LAB", "每次發布前，都先問一次。"],
+    staff: ["MERCHANT STAFF", "把日常預約管理留在 LINE。"],
     settings: ["CHANNEL SETUP", "把 LINE 接到商家的服務流程。"],
   };
   $("#page-eyebrow").textContent = titles[name][0];
@@ -322,6 +368,74 @@ $("#logout-button").addEventListener("click", async () => {
 });
 
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+
+$("#staff-link-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "產生中…");
+  try {
+    const link = await api("/staff-links", {
+      method: "POST",
+      body: JSON.stringify({ display_name: data.display_name, role: data.role }),
+    });
+    const command = `綁定 ${link.code}`;
+    $("#staff-link-command").textContent = command;
+    $("#staff-link-expiry").textContent = `有效期限：${new Date(link.expires_at).toLocaleString("zh-TW")}`;
+    $("#staff-link-result").classList.remove("hidden");
+    toast("綁定碼已產生");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "產生中…");
+  }
+});
+
+$("#copy-staff-link").addEventListener("click", async () => {
+  try {
+    await navigator.clipboard.writeText($("#staff-link-command").textContent);
+    toast("LINE 綁定指令已複製");
+  } catch (_) {
+    toast("無法存取剪貼簿，請手動複製", true);
+  }
+});
+
+$("#refresh-staff").addEventListener("click", async () => {
+  try {
+    await loadStaff();
+    toast("人員清單已更新");
+  } catch (error) {
+    toast(error.message, true);
+  }
+});
+
+$("#staff-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-save-staff]");
+  if (!button) return;
+  const item = button.closest("[data-staff-id]");
+  const field = (name) => item.querySelector(`[data-staff-field="${name}"]`);
+  button.disabled = true;
+  try {
+    await api(`/staff/${encodeURIComponent(item.dataset.staffId)}`, {
+      method: "PUT",
+      body: JSON.stringify({
+        display_name: field("display_name").value.trim(),
+        role: field("role").value,
+        status: field("status").value,
+        notify_new_booking: field("notify_new_booking").checked,
+        notify_cancellation: field("notify_cancellation").checked,
+        daily_summary_enabled: field("daily_summary_enabled").checked,
+        daily_summary_time: field("daily_summary_time").value,
+      }),
+    });
+    await loadStaff();
+    toast("店家人員設定已儲存");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+  }
+});
 
 $("#dataset-select").addEventListener("change", (event) => loadDocuments(event.target.value));
 

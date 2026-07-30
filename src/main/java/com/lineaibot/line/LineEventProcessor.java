@@ -1,6 +1,7 @@
 package com.lineaibot.line;
 
 import com.lineaibot.config.AppProperties;
+import com.lineaibot.merchant.MerchantLineService;
 import com.lineaibot.shared.CryptoService;
 import com.lineaibot.tenant.TenantRepository;
 import java.time.Instant;
@@ -20,6 +21,7 @@ public class LineEventProcessor {
     private final LineRepository lineRepository;
     private final TenantRepository tenantRepository;
     private final ConversationService conversation;
+    private final MerchantLineService merchantConversation;
     private final LineMessagingClient lineClient;
     private final CryptoService crypto;
     private final AppProperties properties;
@@ -29,6 +31,7 @@ public class LineEventProcessor {
             LineRepository lineRepository,
             TenantRepository tenantRepository,
             ConversationService conversation,
+            MerchantLineService merchantConversation,
             LineMessagingClient lineClient,
             CryptoService crypto,
             AppProperties properties,
@@ -36,6 +39,7 @@ public class LineEventProcessor {
         this.lineRepository = lineRepository;
         this.tenantRepository = tenantRepository;
         this.conversation = conversation;
+        this.merchantConversation = merchantConversation;
         this.lineClient = lineClient;
         this.crypto = crypto;
         this.properties = properties;
@@ -81,16 +85,15 @@ public class LineEventProcessor {
             String eventType = payload.path("type").asText("");
             if ("message".equals(eventType)
                     && "text".equals(payload.path("message").path("type").asText(""))) {
-                messages = conversation.handleText(
-                        tenant,
-                        lineUserId,
-                        payload.path("message").path("text").asText(""));
+                String text = payload.path("message").path("text").asText("");
+                messages = merchantConversation.handleText(tenant, lineUserId, text)
+                        .orElseGet(() -> conversation.handleText(
+                                tenant, lineUserId, text));
             } else if ("postback".equals(eventType)) {
-                messages = conversation.handlePostback(
-                        tenant,
-                        lineUserId,
-                        payload.path("postback").path("data").asText(""),
-                        event.webhookEventId());
+                String data = payload.path("postback").path("data").asText("");
+                messages = merchantConversation.handlePostback(tenant, lineUserId, data)
+                        .orElseGet(() -> conversation.handlePostback(
+                                tenant, lineUserId, data, event.webhookEventId()));
             } else {
                 messages = List.of(Map.of(
                         "type", "text",

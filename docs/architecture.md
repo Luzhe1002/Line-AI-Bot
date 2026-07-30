@@ -20,14 +20,17 @@ Repository 使用 Spring `JdbcClient`，所有租戶資料 SQL 都明確帶入 `
 ```mermaid
 flowchart LR
     USER["LINE 使用者"] --> LINE["LINE Messaging API"]
-    ADMIN["商家管理員"] --> API["Spring MVC API"]
+    ADMIN["商家管理員"] --> PORTAL["低頻設定工作台"]
+    ADMIN --> LINE
 
     LINE -->|Webhook| VERIFY["原始 Body 簽章驗證"]
     VERIFY --> DEDUPE["tenant_id + webhookEventId 去重"]
     DEDUPE --> EVENTS[("line_events")]
     EVENTS --> WORKER["有界 Virtual Thread Worker"]
 
-    WORKER --> ORCH["Conversation Service"]
+    WORKER --> STAFF_ROUTE{"已綁定店家人員？"}
+    STAFF_ROUTE -->|"一般顧客"| ORCH["Conversation Service"]
+    STAFF_ROUTE -->|"店家人員"| STAFF_COMMAND["MerchantLineService"]
     ORCH --> BOOKING["BookingManager"]
     ORCH --> KNOWLEDGE["Knowledge Service"]
     ORCH --> HANDOFF[("handoff_tickets")]
@@ -39,7 +42,12 @@ flowchart LR
     ORCH --> OUTBOX[("outbox_messages")]
     OUTBOX --> LINE
 
-    API --> TENANT[("PostgreSQL / H2")]
+    STAFF_COMMAND --> BOOKING
+    BOOKING --> BOOKING_EVENTS[("booking_events")]
+    BOOKING_EVENTS --> NOTIFY["BookingNotificationWorker"]
+    NOTIFY --> OUTBOX
+
+    PORTAL --> TENANT[("PostgreSQL / H2")]
     TENANT --> RESERVATIONS
     TENANT --> CHUNKS
 ```
@@ -62,6 +70,8 @@ flowchart LR
 
 - 單一商家同時只服務一位顧客，所有入口沿用 `tenant_id + active_slot_key` 唯一限制。
 - 使用者在 LINE 輸入預約後，可由 Quick Reply 開啟 `/booking/{tenantSlug}`。
+- Quick Reply 只開啟預約頁，不再直接用 Postback 建立預約；顧客必須填寫
+  姓名後才送出。
 - 預約連結包含 30 分鐘有效、加密且不可竄改的身分憑證；憑證綁定商家與 LINE 使用者。
 - 憑證放在 URL fragment，瀏覽器載入後立即移入 `sessionStorage` 並清除網址。
 - `/booking/api/{tenantSlug}/*` 從 Bearer 憑證取得商家與 LINE 使用者，不接受前端自行指定身分。
@@ -75,8 +85,40 @@ flowchart LR
 - 取消時將 `active_slot_key` 設為 `NULL`，同時段可以再次預約。
 - `ReservationWriter` 使用獨立交易，唯一鍵衝突後主流程仍能查回既有冪等結果。
 - LINE Postback 以 `webhookEventId` 形成預約冪等鍵。
+- `booking_slot_occupancies` 以 `tenant_id + starts_at` 統一保護有效預約與
+  店家封鎖時段；建立預約或封鎖時都在同一交易取得時段占用。
 
 未來支援多員工、多房間或非固定時長時，唯一資源需擴充成 `resource_id`，並在 PostgreSQL 使用 Range Exclusion Constraint 防止區間重疊。
+
+## 店家 LINE 預約管理
+
+店家日常管理與顧客服務沿用同一個商家 LINE 官方帳號，不需要第二個官方帳號。
+店家人員使用自己的私人 LINE 加入商家帳號，透過工作台產生的單次綁定碼建立
+`merchant_staff`。LINE User ID 以穩定 HMAC 欄位查詢，並以加密欄位保存供
+Push 使用。
+
+LINE 事件進入 Worker 後先交由 `MerchantLineService` 判斷：
+
+1. `綁定 <code>` 只會使用同租戶、未使用且未過期的綁定碼。
+2. 已啟用人員輸入 `今日預約`、`明日預約`、`本週預約` 或 `管理預約` 時，
+   進入確定性的店家管理流程。
+3. `merchant_*` Postback 必須再次確認人員仍為 ACTIVE，取消預約時再檢查
+   OWNER／MANAGER 權限。
+4. 其他訊息回到既有顧客 Conversation Service；AI 不會取得店家寫入權限。
+
+預約建立或取消時，`BookingManager` 在狀態異動交易中寫入唯一
+`booking_events`。通知 Worker 使用 Claim、重試與過期復原處理事件，並以
+Outbox `dedupe_key` 避免已成功的接收者在重試時再次收到通知。Push 失敗不會
+回滾已成立或已取消的預約。
+
+「開啟預約月曆」會建立十分鐘有效的 `merchant_manage_tokens`：
+
+- Token 放在 URL fragment，頁面載入後以 Bearer 方式單次交換。
+- 後端建立一小時 HttpOnly Session，並從網址清除 Token。
+- Session 固定 `tenant_id + staff_id`，API 不接受前端自行指定租戶。
+- 寫入要求 Session CSRF Token；VIEWER 不能取消、封鎖或解除時段。
+- 手機頁提供當日清單、取消、封鎖及解除；文件與 LINE Channel 設定仍留在
+  `/portal/`。
 
 ## 知識庫與 AI
 
@@ -114,6 +156,10 @@ RabbitMQ、SQS 或 Kafka 在 API／Worker 需要獨立擴縮、持續高流量�
 - Webhook 簽章驗證在 JSON 解析之前完成。
 - OpenAI 不取得原始 LINE User ID，且回答請求不保存。
 - 只有 `BookingManager` 可以改變預約狀態；AI 只能輸出文字。
+- 店家管理指令先驗證 `tenant_id + merchant_staff`，所有 Postback 與手機
+  Session 都重新檢查人員狀態及角色。
+- 店家綁定碼與手機管理 Token 都短效、單次使用，資料庫只保存 HMAC。
+- 預約與封鎖共用資料庫唯一時段占用，不依賴前端「先查再寫」。
 - Production 模式拒絕預設管理金鑰與加密金鑰。
 - 商家工作台以 Tenant API Key 換取 HttpOnly Session，API Key 不保存於瀏覽器。
 - 工作台所有資料仍由伺服器 Session 決定 `tenant_id`，不接受前端自行指定租戶。

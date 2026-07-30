@@ -15,4 +15,9 @@ public class PortalPageController {
     String booking() {
         return "forward:/booking/index.html";
     }
+
+    @GetMapping("/merchant-booking/{tenantSlug:[a-z0-9][a-z0-9-]*}")
+    String merchantBooking() {
+        return "forward:/merchant-booking/index.html";
+    }
 }

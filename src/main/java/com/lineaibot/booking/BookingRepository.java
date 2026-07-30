@@ -21,6 +21,27 @@ public class BookingRepository {
     public record BusinessHourRow(
             int weekday, LocalTime openTime, LocalTime closeTime, boolean active) {}
 
+    public record AdminReservationRow(
+            String id,
+            String serviceId,
+            String serviceName,
+            String customerName,
+            Instant startsAt,
+            Instant endsAt,
+            String status,
+            Instant createdAt) {}
+
+    public record BookingBlockRow(
+            String id,
+            String tenantId,
+            Instant startsAt,
+            Instant endsAt,
+            String reason,
+            boolean active,
+            String createdByStaffId,
+            Instant createdAt,
+            Instant releasedAt) {}
+
     private final JdbcClient jdbc;
 
     public BookingRepository(JdbcClient jdbc) {
@@ -80,9 +101,8 @@ public class BookingRepository {
     public List<Instant> findReservedStarts(
             String tenantId, Instant windowStart, Instant windowEnd) {
         return jdbc.sql("""
-                        select starts_at from reservations
+                        select starts_at from booking_slot_occupancies
                         where tenant_id = :tenantId
-                          and status in ('HELD', 'CONFIRMED')
                           and starts_at >= :windowStart
                           and starts_at < :windowEnd
                         """)
@@ -90,6 +110,35 @@ public class BookingRepository {
                 .param("windowStart", utc(windowStart))
                 .param("windowEnd", utc(windowEnd))
                 .query((rs, rowNum) -> rs.getObject("starts_at", OffsetDateTime.class).toInstant())
+                .list();
+    }
+
+    public List<AdminReservationRow> findBetween(
+            String tenantId, Instant windowStart, Instant windowEnd) {
+        return jdbc.sql("""
+                        select r.id, r.service_id, s.name as service_name,
+                               r.customer_name, r.starts_at, r.ends_at,
+                               r.status, r.created_at
+                        from reservations r
+                        join booking_services s
+                          on s.id = r.service_id and s.tenant_id = r.tenant_id
+                        where r.tenant_id = :tenantId
+                          and r.starts_at >= :windowStart
+                          and r.starts_at < :windowEnd
+                        order by r.starts_at, r.created_at
+                        """)
+                .param("tenantId", tenantId)
+                .param("windowStart", utc(windowStart))
+                .param("windowEnd", utc(windowEnd))
+                .query((rs, rowNum) -> new AdminReservationRow(
+                        rs.getString("id"),
+                        rs.getString("service_id"),
+                        rs.getString("service_name"),
+                        rs.getString("customer_name"),
+                        rs.getObject("starts_at", OffsetDateTime.class).toInstant(),
+                        rs.getObject("ends_at", OffsetDateTime.class).toInstant(),
+                        rs.getString("status"),
+                        rs.getObject("created_at", OffsetDateTime.class).toInstant()))
                 .list();
     }
 
@@ -180,6 +229,101 @@ public class BookingRepository {
                 .update();
     }
 
+    public void insertSlotOccupancy(
+            String id,
+            String tenantId,
+            Instant startsAt,
+            Instant endsAt,
+            String occupancyType,
+            String referenceId,
+            Instant createdAt) {
+        jdbc.sql("""
+                        insert into booking_slot_occupancies (
+                            id, tenant_id, starts_at, ends_at,
+                            occupancy_type, reference_id, created_at
+                        ) values (
+                            :id, :tenantId, :startsAt, :endsAt,
+                            :occupancyType, :referenceId, :createdAt
+                        )
+                        """)
+                .param("id", id)
+                .param("tenantId", tenantId)
+                .param("startsAt", utc(startsAt))
+                .param("endsAt", utc(endsAt))
+                .param("occupancyType", occupancyType)
+                .param("referenceId", referenceId)
+                .param("createdAt", utc(createdAt))
+                .update();
+    }
+
+    public BookingBlockRow insertBlock(
+            String id,
+            String tenantId,
+            Instant startsAt,
+            Instant endsAt,
+            String reason,
+            String staffId,
+            Instant createdAt) {
+        jdbc.sql("""
+                        insert into booking_blocks (
+                            id, tenant_id, starts_at, ends_at, reason, active,
+                            created_by_staff_id, created_at, released_at
+                        ) values (
+                            :id, :tenantId, :startsAt, :endsAt, :reason, true,
+                            :staffId, :createdAt, null
+                        )
+                        """)
+                .param("id", id)
+                .param("tenantId", tenantId)
+                .param("startsAt", utc(startsAt))
+                .param("endsAt", utc(endsAt))
+                .param("reason", reason)
+                .param("staffId", staffId)
+                .param("createdAt", utc(createdAt))
+                .update();
+        return findBlock(tenantId, id).orElseThrow();
+    }
+
+    public Optional<BookingBlockRow> findBlock(String tenantId, String blockId) {
+        return jdbc.sql("""
+                        select * from booking_blocks
+                        where tenant_id = :tenantId and id = :blockId
+                        """)
+                .param("tenantId", tenantId)
+                .param("blockId", blockId)
+                .query(this::mapBlock)
+                .optional();
+    }
+
+    public List<BookingBlockRow> findBlocksBetween(
+            String tenantId, Instant windowStart, Instant windowEnd) {
+        return jdbc.sql("""
+                        select * from booking_blocks
+                        where tenant_id = :tenantId
+                          and starts_at >= :windowStart
+                          and starts_at < :windowEnd
+                        order by starts_at
+                        """)
+                .param("tenantId", tenantId)
+                .param("windowStart", utc(windowStart))
+                .param("windowEnd", utc(windowEnd))
+                .query(this::mapBlock)
+                .list();
+    }
+
+    public void releaseBlock(String tenantId, String blockId, Instant releasedAt) {
+        jdbc.sql("""
+                        update booking_blocks
+                        set active = false, released_at = :releasedAt
+                        where tenant_id = :tenantId and id = :blockId and active = true
+                        """)
+                .param("releasedAt", utc(releasedAt))
+                .param("tenantId", tenantId)
+                .param("blockId", blockId)
+                .update();
+        deleteSlotOccupancy(tenantId, "BLOCK", blockId);
+    }
+
     public void cancel(String tenantId, String reservationId, Instant cancelledAt) {
         jdbc.sql("""
                         update reservations
@@ -190,6 +334,21 @@ public class BookingRepository {
                 .param("cancelledAt", utc(cancelledAt))
                 .param("tenantId", tenantId)
                 .param("reservationId", reservationId)
+                .update();
+        deleteSlotOccupancy(tenantId, "RESERVATION", reservationId);
+    }
+
+    public void deleteSlotOccupancy(
+            String tenantId, String occupancyType, String referenceId) {
+        jdbc.sql("""
+                        delete from booking_slot_occupancies
+                        where tenant_id = :tenantId
+                          and occupancy_type = :occupancyType
+                          and reference_id = :referenceId
+                        """)
+                .param("tenantId", tenantId)
+                .param("occupancyType", occupancyType)
+                .param("referenceId", referenceId)
                 .update();
     }
 
@@ -207,6 +366,20 @@ public class BookingRepository {
                 rs.getString("idempotency_key"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 cancelled == null ? null : cancelled.toInstant());
+    }
+
+    private BookingBlockRow mapBlock(ResultSet rs, int rowNum) throws SQLException {
+        OffsetDateTime released = rs.getObject("released_at", OffsetDateTime.class);
+        return new BookingBlockRow(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getObject("starts_at", OffsetDateTime.class).toInstant(),
+                rs.getObject("ends_at", OffsetDateTime.class).toInstant(),
+                rs.getString("reason"),
+                rs.getBoolean("active"),
+                rs.getString("created_by_staff_id"),
+                rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                released == null ? null : released.toInstant());
     }
 
     private OffsetDateTime utc(Instant value) {

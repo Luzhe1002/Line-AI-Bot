@@ -5,7 +5,6 @@ import com.lineaibot.booking.BookingRepository;
 import com.lineaibot.booking.BookingAccessTokenService;
 import com.lineaibot.config.AppProperties;
 import com.lineaibot.knowledge.KnowledgeService;
-import com.lineaibot.shared.ApiException;
 import com.lineaibot.tenant.TenantRepository.TenantRow;
 import java.net.URLDecoder;
 import java.net.URLEncoder;
@@ -26,8 +25,6 @@ public class ConversationService {
 
     private static final DateTimeFormatter SLOT_LABEL =
             DateTimeFormatter.ofPattern("MM/dd HH:mm");
-    private static final DateTimeFormatter BOOKED_LABEL =
-            DateTimeFormatter.ofPattern("yyyy/MM/dd HH:mm");
 
     private final IntentClassifier classifier;
     private final BookingManager bookings;
@@ -79,7 +76,6 @@ public class ConversationService {
         recordInbound(tenant.id(), lineUserId, "postback", data);
         Map<String, String> values = parseQuery(data);
         List<Map<String, Object>> messages = switch (values.getOrDefault("action", "")) {
-            case "book" -> bookFromPostback(tenant, lineUserId, values, webhookEventId);
             case "cancel" -> cancelFromPostback(tenant, lineUserId, values);
             case "handoff" -> createHandoff(tenant, lineUserId, "使用者點選人工客服");
             default -> List.of(textMessage("無法辨識這個操作，請重新選擇。"));
@@ -94,42 +90,27 @@ public class ConversationService {
             return List.of(textMessage("商家尚未設定可預約服務，請聯絡人工客服。"));
         }
         var service = services.getFirst();
-        var slots = bookings.nextAvailableSlots(tenant, service.id(), 14, 10);
-        if (slots.isEmpty()) {
+        if (bookings.nextAvailableSlots(tenant, service.id(), 14, 1).isEmpty()) {
             return List.of(textMessage("未來兩週目前沒有可預約時段，請聯絡人工客服。"));
         }
-        List<Map<String, Object>> items = new ArrayList<>();
         String token = bookingAccessTokens.issue(tenant.id(), tenant.slug(), lineUserId);
         String bookingUrl = properties.getPublicBaseUrl().replaceAll("/+$", "")
                 + "/booking/"
                 + tenant.slug()
                 + "#token="
                 + URLEncoder.encode(token, StandardCharsets.UTF_8);
-        items.add(Map.of(
+        Map<String, Object> openBookingPage = Map.of(
                 "type", "action",
                 "action", Map.of(
                         "type", "uri",
                         "label", "開啟預約頁",
-                        "uri", bookingUrl)));
-        ZoneId zone = ZoneId.of(tenant.timezone());
-        for (var slot : slots) {
-            String label = SLOT_LABEL.format(slot.startsAt().atZone(zone));
-            String data = query(Map.of(
-                    "action", "book",
-                    "service_id", service.id(),
-                    "starts_at", slot.startsAt().toString()));
-            items.add(Map.of(
-                    "type", "action",
-                    "action", Map.of(
-                            "type", "postback",
-                            "label", label,
-                            "data", data,
-                            "displayText", "我要預約 " + label)));
-        }
+                        "uri", bookingUrl));
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", "text");
-        message.put("text", "請選擇「" + service.name() + "」的預約時段：");
-        message.put("quickReply", Map.of("items", items));
+        message.put(
+                "text",
+                "請開啟「" + service.name() + "」預約頁，選擇時段並填寫預約姓名。");
+        message.put("quickReply", Map.of("items", List.of(openBookingPage)));
         return List.of(message);
     }
 
@@ -177,33 +158,6 @@ public class ConversationService {
                                     "text", "我要人工客服")))));
         }
         return List.of(message);
-    }
-
-    private List<Map<String, Object>> bookFromPostback(
-            TenantRow tenant,
-            String lineUserId,
-            Map<String, String> values,
-            String webhookEventId) {
-        try {
-            var reservation = bookings.createReservation(
-                    tenant,
-                    require(values, "service_id"),
-                    lineUserId,
-                    Instant.parse(require(values, "starts_at")),
-                    null,
-                    "line:" + webhookEventId);
-            String localStart = BOOKED_LABEL.format(
-                    reservation.startsAt().atZone(ZoneId.of(tenant.timezone())));
-            return List.of(textMessage(
-                    "預約成功！時間：" + localStart + "。\n預約編號：" + reservation.id()));
-        } catch (ApiException exception) {
-            if (exception.status().value() == 409) {
-                return List.of(textMessage("這個時段剛被預約，請輸入「預約」重新選擇。"));
-            }
-            return List.of(textMessage("目前無法完成預約，請聯絡人工客服。"));
-        } catch (RuntimeException exception) {
-            return List.of(textMessage("預約資料不完整，請重新選擇時段。"));
-        }
     }
 
     private List<Map<String, Object>> cancelFromPostback(

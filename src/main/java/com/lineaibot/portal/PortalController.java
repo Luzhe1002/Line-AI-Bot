@@ -9,6 +9,11 @@ import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentRead;
 import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentUpdate;
 import com.lineaibot.knowledge.KnowledgeDtos.ReindexResponse;
 import com.lineaibot.knowledge.KnowledgeService;
+import com.lineaibot.merchant.MerchantDtos.StaffLinkCreate;
+import com.lineaibot.merchant.MerchantDtos.StaffLinkView;
+import com.lineaibot.merchant.MerchantDtos.StaffUpdate;
+import com.lineaibot.merchant.MerchantDtos.StaffView;
+import com.lineaibot.merchant.MerchantStaffService;
 import com.lineaibot.shared.ApiAuthService;
 import com.lineaibot.shared.ApiException;
 import com.lineaibot.tenant.TenantDtos.BookingServiceCreate;
@@ -36,6 +41,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestHeader;
@@ -57,16 +63,19 @@ public class PortalController {
     private final TenantService tenants;
     private final TenantRepository tenantRepository;
     private final KnowledgeService knowledge;
+    private final MerchantStaffService merchantStaff;
 
     public PortalController(
             ApiAuthService apiAuth,
             TenantService tenants,
             TenantRepository tenantRepository,
-            KnowledgeService knowledge) {
+            KnowledgeService knowledge,
+            MerchantStaffService merchantStaff) {
         this.apiAuth = apiAuth;
         this.tenants = tenants;
         this.tenantRepository = tenantRepository;
         this.knowledge = knowledge;
+        this.merchantStaff = merchantStaff;
     }
 
     public record LoginRequest(@NotBlank String tenantId, @NotBlank String apiKey) {}
@@ -161,6 +170,31 @@ public class PortalController {
             @Valid @RequestBody BookingServiceCreate request) {
         requireCsrf(session, csrfToken);
         return tenants.createBookingService(requireTenant(session), request);
+    }
+
+    @GetMapping("/staff")
+    List<StaffView> staff(HttpSession session) {
+        return merchantStaff.list(requireTenant(session).id());
+    }
+
+    @PostMapping("/staff-links")
+    @ResponseStatus(HttpStatus.CREATED)
+    StaffLinkView createStaffLink(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @Valid @RequestBody StaffLinkCreate request) {
+        requireCsrf(session, csrfToken);
+        return merchantStaff.createLink(requireTenant(session).id(), request);
+    }
+
+    @PutMapping("/staff/{staffId}")
+    StaffView updateStaff(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @PathVariable String staffId,
+            @Valid @RequestBody StaffUpdate request) {
+        requireCsrf(session, csrfToken);
+        return merchantStaff.update(requireTenant(session).id(), staffId, request);
     }
 
     @PostMapping("/datasets")
