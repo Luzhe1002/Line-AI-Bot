@@ -3,6 +3,7 @@ const state = {
   tenant: null,
   overview: null,
   documents: [],
+  editingDocumentId: null,
   activeView: "overview",
 };
 
@@ -103,7 +104,30 @@ async function refreshOverview() {
 
 async function loadDocuments(datasetId) {
   state.documents = datasetId ? await api(`/documents?datasetId=${encodeURIComponent(datasetId)}`) : [];
+  resetDocumentForm();
   renderDocuments();
+}
+
+function selectedDataset() {
+  const datasetId = $("#dataset-select").value;
+  return state.overview?.datasets?.find((item) => item.id === datasetId) || null;
+}
+
+async function ensureEditableDataset() {
+  const selected = selectedDataset();
+  if (!selected) throw new Error("請先建立資料集");
+  if (selected.status === "DRAFT") return selected.id;
+
+  toast("正在從正式版建立新版草稿…");
+  const draft = await api(`/datasets/draft?datasetId=${encodeURIComponent(selected.id)}`, {
+    method: "POST",
+  });
+  await refreshOverview();
+  $("#dataset-select").value = draft.id;
+  if (selectedDataset()?.id !== draft.id) {
+    await loadDocuments(draft.id);
+  }
+  return draft.id;
 }
 
 function renderOverview() {
@@ -136,6 +160,9 @@ function renderOverview() {
 
 function renderDocuments() {
   const list = $("#document-list");
+  const editable = selectedDataset()?.status === "DRAFT";
+  $("#publish-button").disabled = !editable;
+  $("#publish-button").title = editable ? "" : "正式版不需要再次發布";
   if (!state.documents.length) {
     list.innerHTML = `<div class="empty-state"><strong>還沒有文件</strong><p>從左側加入第一份已確認的商家知識。</p></div>`;
     return;
@@ -147,7 +174,40 @@ function renderDocuments() {
         <span class="badge ${item.index_status === "FAILED" ? "failed" : ""}">${item.index_status}</span>
       </div>
       <p>${escapeHtml(item.content.slice(0, 110))}${item.content.length > 110 ? "…" : ""}</p>
+      <div class="document-actions">
+        ${editable ? `
+          <button class="text-button" type="button" data-document-action="edit" data-document-id="${item.id}">編輯</button>
+          <button class="text-button danger" type="button" data-document-action="delete" data-document-id="${item.id}">刪除</button>
+        ` : `<small>正式版為唯讀；修改時會建立新版草稿。</small>`}
+      </div>
     </article>`).join("");
+}
+
+function resetDocumentForm() {
+  const form = $("#document-form");
+  state.editingDocumentId = null;
+  form.reset();
+  $("#document-form-eyebrow").textContent = "NEW SOURCE";
+  $("#document-form-title").textContent = "新增知識文件";
+  $("#document-submit").textContent = "加入草稿並索引";
+  $("#document-submit").dataset.defaultLabel = "加入草稿並索引";
+  $("#cancel-document-edit").classList.add("hidden");
+}
+
+function editDocument(documentId) {
+  const document = state.documents.find((item) => item.id === documentId);
+  if (!document) return;
+  state.editingDocumentId = document.id;
+  const form = $("#document-form");
+  form.elements.title.value = document.title;
+  form.elements.content.value = document.content;
+  form.elements.source_url.value = document.source_url || "";
+  $("#document-form-eyebrow").textContent = "EDIT SOURCE";
+  $("#document-form-title").textContent = "編輯知識文件";
+  $("#document-submit").textContent = "儲存修改並重新索引";
+  $("#document-submit").dataset.defaultLabel = "儲存修改並重新索引";
+  $("#cancel-document-edit").classList.remove("hidden");
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function renderSettings() {
@@ -187,7 +247,9 @@ $$("[data-auth-tab]").forEach((button) => button.addEventListener("click", () =>
 
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "登入中…");
   try {
     const session = await api("/session", {
       method: "POST",
@@ -195,9 +257,13 @@ $("#login-form").addEventListener("submit", async (event) => {
     });
     state.csrfToken = session.csrf_token;
     state.tenant = session.tenant;
-    event.currentTarget.reset();
+    form.reset();
     await enterApp();
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "登入中…");
+  }
 });
 
 $("#onboard-form").addEventListener("submit", async (event) => {
@@ -261,33 +327,64 @@ $("#dataset-select").addEventListener("change", (event) => loadDocuments(event.t
 
 $("#document-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
-  const datasetId = $("#dataset-select").value;
-  if (!datasetId) return toast("請先建立資料集", true);
+  const form = event.currentTarget;
+  const data = formData(form);
+  const editingDocumentId = state.editingDocumentId;
+  setSubmitting(form, true, editingDocumentId ? "儲存並索引中…" : "加入並索引中…");
   try {
-    await api(`/documents?datasetId=${encodeURIComponent(datasetId)}`, {
-      method: "POST",
+    const datasetId = await ensureEditableDataset();
+    const query = new URLSearchParams({ datasetId });
+    if (editingDocumentId) query.set("documentId", editingDocumentId);
+    await api(`/documents?${query}`, {
+      method: editingDocumentId ? "PUT" : "POST",
       body: JSON.stringify({
         title: data.title,
         content: data.content,
         source_url: data.source_url || null,
       }),
     });
-    event.currentTarget.reset();
     await loadDocuments(datasetId);
     renderOverview();
-    toast("文件已加入並完成索引");
-  } catch (error) { toast(error.message, true); }
+    toast(editingDocumentId ? "文件已更新並完成索引" : "文件已加入並完成索引");
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, editingDocumentId ? "儲存並索引中…" : "加入並索引中…");
+  }
+});
+
+$("#cancel-document-edit").addEventListener("click", resetDocumentForm);
+
+$("#document-list").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-document-action]");
+  if (!button) return;
+  const documentId = button.dataset.documentId;
+  if (button.dataset.documentAction === "edit") {
+    editDocument(documentId);
+    return;
+  }
+  const document = state.documents.find((item) => item.id === documentId);
+  if (!document || !window.confirm(`確定刪除「${document.title}」？此變更會在發布草稿後生效。`)) return;
+  try {
+    const datasetId = await ensureEditableDataset();
+    await api(`/documents?${new URLSearchParams({ datasetId, documentId })}`, {
+      method: "DELETE",
+    });
+    await loadDocuments(datasetId);
+    renderOverview();
+    toast("文件已從草稿刪除");
+  } catch (error) {
+    toast(error.message, true);
+  }
 });
 
 $("#upload-button").addEventListener("click", async () => {
   const input = $("#knowledge-file");
-  const datasetId = $("#dataset-select").value;
-  if (!datasetId) return toast("請先建立資料集", true);
   if (!input.files.length) return toast("請先選擇檔案", true);
   const body = new FormData();
   body.append("file", input.files[0]);
   try {
+    const datasetId = await ensureEditableDataset();
     await api(`/documents/upload?datasetId=${encodeURIComponent(datasetId)}`, {
       method: "POST",
       body,
@@ -301,9 +398,13 @@ $("#upload-button").addEventListener("click", async () => {
 
 $("#answer-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  const datasetId = $("#dataset-select").value;
+  if (!datasetId) return toast("請先建立資料集", true);
+  setSubmitting(form, true, "產生回答中…");
   try {
-    const result = await api("/answer", {
+    const result = await api(`/answer?datasetId=${encodeURIComponent(datasetId)}`, {
       method: "POST",
       body: JSON.stringify({ question: data.question }),
     });
@@ -315,12 +416,18 @@ $("#answer-form").addEventListener("submit", async (event) => {
       <p class="eyebrow">AI RESPONSE · 信心 ${Math.round(result.confidence * 100)}%</p>
       <p class="answer-text">${escapeHtml(result.answer)}</p>
       ${citations || '<div class="citation">沒有引用來源，系統已採取保守回覆。</div>'}`;
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "產生回答中…");
+  }
 });
 
 $("#line-form").addEventListener("submit", async (event) => {
   event.preventDefault();
-  const data = formData(event.currentTarget);
+  const form = event.currentTarget;
+  const data = formData(form);
+  setSubmitting(form, true, "儲存中…");
   try {
     await api("/line-channel", {
       method: "PUT",
@@ -330,10 +437,14 @@ $("#line-form").addEventListener("submit", async (event) => {
         enabled: data.enabled === "on",
       }),
     });
-    event.currentTarget.reset();
+    form.reset();
     await refreshOverview();
     toast("LINE Channel 已安全保存");
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    setSubmitting(form, false, "儲存中…");
+  }
 });
 
 $("#publish-button").addEventListener("click", async () => {

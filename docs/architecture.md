@@ -58,6 +58,16 @@ flowchart LR
 
 ## 預約一致性
 
+### LINE 行動預約頁
+
+- 單一商家同時只服務一位顧客，所有入口沿用 `tenant_id + active_slot_key` 唯一限制。
+- 使用者在 LINE 輸入預約後，可由 Quick Reply 開啟 `/booking/{tenantSlug}`。
+- 預約連結包含 30 分鐘有效、加密且不可竄改的身分憑證；憑證綁定商家與 LINE 使用者。
+- 憑證放在 URL fragment，瀏覽器載入後立即移入 `sessionStorage` 並清除網址。
+- `/booking/api/{tenantSlug}/*` 從 Bearer 憑證取得商家與 LINE 使用者，不接受前端自行指定身分。
+- 頁面顯示的時段僅供選擇；確認時仍由 `BookingManager` 重新驗證並建立預約。
+- 時段衝突回傳 `409`，頁面保留服務及日期並重新載入可用時段。
+
 - 商家設定固定 `slot_minutes`。
 - 開始時間必須在未來、落在該日營業時間內，且對齊時段。
 - `tenant_id + idempotency_key` 防止相同請求重複建立。
@@ -79,6 +89,7 @@ flowchart LR
 7. 沒有可靠資料時回覆無法確認並提供人工客服選項。
 
 Local Provider 可完全離線驗證。OpenAI Provider 使用 Embeddings 與 Responses API、`store=false`，LINE User ID 先以 HMAC 轉成不可逆穩定識別碼。模型不直接取得資料庫或預約工具權限。
+離線檢索可用小型、經測試的商務同義詞群補足常見中文問法，但正式語意召回仍應使用 OpenAI Embeddings；不以降低全域相關性門檻取代語意檢索。
 
 目前向量仍以 JSON 儲存並在應用層掃描，適合 MVP。當單一租戶 Chunk 數達數萬筆或查詢延遲不符目標時，將欄位升級為 pgvector、建立 HNSW 索引並增加 Reranker。
 
@@ -118,6 +129,10 @@ RabbitMQ、SQS 或 Kafka 在 API／Worker 需要獨立擴縮、持續高流量�
 TXT／Markdown／CSV 匯入、索引、發布及回答測試。檔案大小先限制為 1 MB，
 文件內容限制為 100,000 字，並由 Spring Multipart 在進入應用邏輯前拒絕
 過大請求。
+
+工作台的回答測試會將目前選取的 `datasetId` 傳給 `/portal/api/answer`，
+後端以 Session 租戶重新驗證資料集歸屬，因此可在發布前預覽草稿。正式
+`/api/v1/tenants/{tenantId}/ai/answer` 與 LINE 對話仍只讀取 Active Dataset。
 
 歷史對話匯入會採獨立流程：檔案掃描、格式解析、個資遮蔽、候選 FAQ 萃取、
 人工核准、加入草稿、索引與發布。未核准的對話不能進入 Active Dataset。

@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>LINE 預約</title>
+  <link rel="stylesheet" href="/booking/styles.css">
+</head>
+<body>
+  <main class="booking-shell">
+    <header>
+      <p class="eyebrow">LINE 預約</p>
+      <h1 id="tenant-name">載入中…</h1>
+      <div class="progress" aria-label="預約進度"><span class="active"></span><span></span><span></span><span></span></div>
+    </header>
+
+    <section class="step active" data-step="0">
+      <p class="step-label">步驟 1／4</p>
+      <h2>選擇服務</h2>
+      <div id="services" class="choice-list"></div>
+    </section>
+
+    <section class="step" data-step="1">
+      <p class="step-label">步驟 2／4</p>
+      <h2>選擇日期與時間</h2>
+      <p id="selected-service" class="muted"></p>
+      <label for="booking-date">預約日期</label>
+      <input id="booking-date" type="date">
+      <p class="field-label">可預約時段</p>
+      <div id="slots" class="slot-grid"></div>
+      <button class="secondary back" data-back="0">返回選服務</button>
+    </section>
+
+    <section class="step" data-step="2">
+      <p class="step-label">步驟 3／4</p>
+      <h2>確認預約內容</h2>
+      <dl class="summary">
+        <dt>服務</dt><dd id="summary-service"></dd>
+        <dt>日期</dt><dd id="summary-date"></dd>
+        <dt>時間</dt><dd id="summary-time"></dd>
+        <dt>所需時間</dt><dd id="summary-duration"></dd>
+      </dl>
+      <label for="customer-name">預約姓名</label>
+      <input id="customer-name" maxlength="160" autocomplete="name" placeholder="請輸入現場使用的姓名">
+      <p class="policy">送出後仍會由系統重新確認時段；只有收到「預約成功」才代表預約成立。</p>
+      <button id="confirm" class="primary">確認預約</button>
+      <button class="secondary back" data-back="1">重新選擇時間</button>
+    </section>
+
+    <section class="step success" data-step="3">
+      <div class="success-mark" aria-hidden="true">✓</div>
+      <h2>預約完成</h2>
+      <p id="success-message"></p>
+      <p class="muted">請保留 LINE 對話中的確認訊息。</p>
+    </section>
+
+    <section id="fatal-error" class="fatal" hidden>
+      <h2>無法開啟預約頁</h2>
+      <p id="fatal-message">連結可能已失效，請回到 LINE 重新輸入「預約」。</p>
+    </section>
+    <div id="notice" class="notice" role="status" aria-live="polite"></div>
+  </main>
+  <script src="/booking/app.js" defer></script>
+</body>
+</html>

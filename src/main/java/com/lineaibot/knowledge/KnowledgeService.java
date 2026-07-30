@@ -8,6 +8,7 @@ import com.lineaibot.knowledge.KnowledgeDtos.DatasetCreate;
 import com.lineaibot.knowledge.KnowledgeDtos.DatasetRead;
 import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentCreate;
 import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentRead;
+import com.lineaibot.knowledge.KnowledgeDtos.KnowledgeDocumentUpdate;
 import com.lineaibot.knowledge.KnowledgeRepository.ChunkRow;
 import com.lineaibot.knowledge.KnowledgeRepository.DocumentRow;
 import com.lineaibot.shared.ApiException;
@@ -35,6 +36,8 @@ public class KnowledgeService {
 
     private static final Pattern LATIN_WORD = Pattern.compile("[a-z0-9]+");
     private static final Pattern CJK_CHAR = Pattern.compile("[\\u3400-\\u9fff]");
+    private static final List<List<String>> RETRIEVAL_SYNONYM_GROUPS = List.of(
+            List.of("刷卡", "信用卡", "卡片付款"));
 
     private final KnowledgeRepository repository;
     private final KnowledgeIndexer indexer;
@@ -82,14 +85,54 @@ public class KnowledgeService {
         return repository.findDatasets(tenant.id());
     }
 
+    public DatasetRead createDraftFromDataset(TenantRow tenant, String sourceDatasetId) {
+        DatasetRead source = requireDataset(tenant, sourceDatasetId);
+        if ("DRAFT".equals(source.status())) {
+            return source;
+        }
+        var existing = repository.findDraftDataset(tenant.id(), source.name());
+        if (existing.isPresent()) {
+            return existing.get();
+        }
+
+        DatasetRead draft = new DatasetRead(
+                UUID.randomUUID().toString(),
+                tenant.id(),
+                source.name(),
+                repository.nextDatasetVersion(tenant.id(), source.name()),
+                "DRAFT",
+                Instant.now(),
+                null);
+        try {
+            repository.insertDataset(draft);
+        } catch (DataIntegrityViolationException exception) {
+            return repository.findDraftDataset(tenant.id(), source.name())
+                    .orElseThrow(() -> new ApiException(
+                            HttpStatus.CONFLICT, "Unable to create a draft dataset"));
+        }
+
+        for (DocumentRow sourceDocument :
+                repository.findDocuments(tenant.id(), sourceDatasetId)) {
+            DocumentRow copied = new DocumentRow(
+                    UUID.randomUUID().toString(),
+                    tenant.id(),
+                    draft.id(),
+                    sourceDocument.title(),
+                    sourceDocument.content(),
+                    sourceDocument.sourceUrl(),
+                    sourceDocument.active(),
+                    "PENDING",
+                    null,
+                    null);
+            repository.insertDocument(copied, Instant.now());
+            indexer.indexDocument(copied.id());
+        }
+        return draft;
+    }
+
     public KnowledgeDocumentRead addDocument(
             TenantRow tenant, String datasetId, KnowledgeDocumentCreate request) {
-        DatasetRead dataset = repository.findDataset(tenant.id(), datasetId)
-                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Dataset not found"));
-        if (!"DRAFT".equals(dataset.status())) {
-            throw new ApiException(
-                    HttpStatus.CONFLICT, "Only draft datasets can be changed");
-        }
+        DatasetRead dataset = requireDraft(tenant, datasetId);
         DocumentRow document = new DocumentRow(
                 UUID.randomUUID().toString(),
                 tenant.id(),
@@ -103,6 +146,35 @@ public class KnowledgeService {
                 null);
         repository.insertDocument(document, Instant.now());
         return indexer.indexDocument(document.id()).toRead();
+    }
+
+    public KnowledgeDocumentRead updateDocument(
+            TenantRow tenant,
+            String datasetId,
+            String documentId,
+            KnowledgeDocumentUpdate request) {
+        requireDraft(tenant, datasetId);
+        repository.findDocument(tenant.id(), datasetId, documentId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "Knowledge document not found"));
+        repository.updateDocument(
+                tenant.id(),
+                datasetId,
+                documentId,
+                request.title(),
+                request.content(),
+                request.sourceUrl());
+        repository.deleteChunks(documentId);
+        return indexer.indexDocument(documentId).toRead();
+    }
+
+    @Transactional
+    public void deleteDocument(TenantRow tenant, String datasetId, String documentId) {
+        requireDraft(tenant, datasetId);
+        repository.findDocument(tenant.id(), datasetId, documentId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "Knowledge document not found"));
+        repository.deleteDocument(tenant.id(), datasetId, documentId);
     }
 
     public List<KnowledgeDocumentRead> listDocuments(TenantRow tenant, String datasetId) {
@@ -162,6 +234,22 @@ public class KnowledgeService {
                     "none");
         }
         DatasetRead dataset = activeDataset.get();
+        return answerFromDataset(tenant, dataset, question, lineUserId, provider);
+    }
+
+    public AnswerResponse previewAnswer(
+            TenantRow tenant, String datasetId, String question) {
+        DatasetRead dataset = repository.findDataset(tenant.id(), datasetId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Dataset not found"));
+        return answerFromDataset(tenant, dataset, question, null, providers.current());
+    }
+
+    private AnswerResponse answerFromDataset(
+            TenantRow tenant,
+            DatasetRead dataset,
+            String question,
+            String lineUserId,
+            AiProvider provider) {
         List<GroundingContext> contexts = retrieve(
                 tenant.id(), dataset.id(), question, provider);
         if (contexts.isEmpty()) {
@@ -200,6 +288,21 @@ public class KnowledgeService {
 
     public KnowledgeDtos.ReindexResponse reindex(TenantRow tenant, String datasetId) {
         return indexer.reindexDataset(tenant.id(), datasetId);
+    }
+
+    private DatasetRead requireDataset(TenantRow tenant, String datasetId) {
+        return repository.findDataset(tenant.id(), datasetId)
+                .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Dataset not found"));
+    }
+
+    private DatasetRead requireDraft(TenantRow tenant, String datasetId) {
+        DatasetRead dataset = requireDataset(tenant, datasetId);
+        if (!"DRAFT".equals(dataset.status())) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT,
+                    "This published version is read-only; create a draft to make changes");
+        }
+        return dataset;
     }
 
     private List<GroundingContext> retrieve(
@@ -309,6 +412,16 @@ public class KnowledgeService {
         String normalized = Normalizer.normalize(value, Normalizer.Form.NFKC)
                 .toLowerCase(Locale.ROOT);
         Set<String> result = new HashSet<>();
+        addFeatures(normalized, result);
+        for (List<String> group : RETRIEVAL_SYNONYM_GROUPS) {
+            if (group.stream().anyMatch(normalized::contains)) {
+                group.forEach(alias -> addFeatures(alias, result));
+            }
+        }
+        return result;
+    }
+
+    private void addFeatures(String normalized, Set<String> result) {
         var words = LATIN_WORD.matcher(normalized);
         while (words.find()) {
             result.add(words.group());
@@ -322,7 +435,6 @@ public class KnowledgeService {
         for (int index = 0; index + 1 < chars.size(); index++) {
             result.add(chars.get(index) + chars.get(index + 1));
         }
-        return result;
     }
 
     private double round(double value) {

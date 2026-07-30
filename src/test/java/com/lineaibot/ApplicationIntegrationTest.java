@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.lineaibot.booking.BookingAccessTokenService;
 import com.lineaibot.line.LineEventProcessor;
 import com.lineaibot.line.LineRepository;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +59,9 @@ class ApplicationIntegrationTest {
 
     @Autowired
     private LineEventProcessor lineEventProcessor;
+
+    @Autowired
+    private BookingAccessTokenService bookingAccessTokens;
 
     @Autowired
     private JdbcClient jdbc;
@@ -145,7 +149,7 @@ class ApplicationIntegrationTest {
                         .content("""
                                 {
                                   "title": "Portal policy",
-                                  "content": "Portal uploads require review before publication."
+                                  "content": "Portal uploads require review before publication. 本店接受現金及信用卡付款。"
                                 }
                                 """))
                 .andExpect(status().isForbidden())
@@ -159,11 +163,64 @@ class ApplicationIntegrationTest {
                         .content("""
                                 {
                                   "title": "Portal policy",
-                                  "content": "Portal uploads require review before publication."
+                                  "content": "Portal uploads require review before publication. 本店接受現金及信用卡付款。"
                                 }
                                 """))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.index_status").value("READY"));
+
+        mvc.perform(post("/portal/api/answer")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", datasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "What requires review before publication?"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.grounded").value(true))
+                .andExpect(jsonPath("$.dataset_id").value(datasetId))
+                .andExpect(jsonPath("$.citations[0].title").value("Portal policy"))
+                .andExpect(jsonPath("$.citations[0].snippet")
+                        .value(org.hamcrest.Matchers.containsString("信用卡")));
+
+        mvc.perform(post("/portal/api/answer")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", datasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "可以刷卡嗎？"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.grounded").value(true))
+                .andExpect(jsonPath("$.dataset_id").value(datasetId))
+                .andExpect(jsonPath("$.answer")
+                        .value("本店接受現金及信用卡付款。"))
+                .andExpect(jsonPath("$.citations[0].title").value("Portal policy"))
+                .andExpect(jsonPath("$.citations[0].snippet")
+                        .value(org.hamcrest.Matchers.containsString("信用卡")));
+
+        Tenant otherTenant = createTenant("portal-preview-other");
+        String otherDatasetId = firstId(getJson(
+                "/api/v1/tenants/" + otherTenant.id() + "/datasets",
+                otherTenant.apiKey()));
+        mvc.perform(post("/portal/api/answer")
+                        .session(session)
+                        .header("X-CSRF-Token", csrfToken)
+                        .queryParam("datasetId", otherDatasetId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "question": "Can this tenant read another tenant's draft?"
+                                }
+                                """))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.detail").value("Dataset not found"));
 
         MockMultipartFile file = new MockMultipartFile(
                 "file",
@@ -183,6 +240,101 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isOk());
         mvc.perform(get("/portal/api/overview").session(session))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void publishedKnowledgeCanBeCopiedEditedAndDeletedInANewDraft()
+            throws Exception {
+        Tenant tenant = createTenant("knowledge-edit");
+        String datasetId = firstId(getJson(
+                "/api/v1/tenants/" + tenant.id() + "/datasets",
+                tenant.apiKey()));
+
+        MvcResult created = mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "付款方式",
+                                  "content": "本店接受現金及信用卡付款。"
+                                }
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn();
+        String activeDocumentId = json(created).path("id").asText();
+
+        mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/publish",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isOk());
+
+        mvc.perform(put(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents/{documentId}",
+                                tenant.id(),
+                                datasetId,
+                                activeDocumentId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "不應修改",
+                                  "content": "正式版不可直接修改。"
+                                }
+                                """))
+                .andExpect(status().isConflict());
+
+        JsonNode draft = json(mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/draft",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("DRAFT"))
+                .andExpect(jsonPath("$.version").value(2))
+                .andReturn());
+        String draftId = draft.path("id").asText();
+
+        JsonNode draftDocuments = getJson(
+                "/api/v1/tenants/" + tenant.id() + "/datasets/" + draftId + "/documents",
+                tenant.apiKey());
+        assertThat(draftDocuments).hasSize(1);
+        String draftDocumentId = draftDocuments.get(0).path("id").asText();
+        assertThat(draftDocumentId).isNotEqualTo(activeDocumentId);
+
+        mvc.perform(put(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents/{documentId}",
+                                tenant.id(),
+                                draftId,
+                                draftDocumentId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "付款方式（更新）",
+                                  "content": "本店接受現金、信用卡及行動支付。"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.title").value("付款方式（更新）"))
+                .andExpect(jsonPath("$.index_status").value("READY"));
+
+        mvc.perform(delete(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents/{documentId}",
+                                tenant.id(),
+                                draftId,
+                                draftDocumentId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isNoContent());
+
+        assertThat(getJson(
+                        "/api/v1/tenants/" + tenant.id() + "/datasets/" + draftId + "/documents",
+                        tenant.apiKey()))
+                .isEmpty();
     }
 
     @Test
@@ -265,6 +417,70 @@ class ApplicationIntegrationTest {
                                 """
                                 .formatted(serviceId, slot)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void lineBookingPageUsesShortLivedIdentityAndRechecksTheSlot() throws Exception {
+        Tenant tenant = createTenant("public-booking");
+        String token = bookingAccessTokens.issue(tenant.id(), tenant.slug(), "U-booking-page");
+        String authorization = "Bearer " + token;
+        String serviceId = firstId(getJson(
+                "/api/v1/tenants/" + tenant.id() + "/booking-services",
+                tenant.apiKey()));
+        Instant slot = nextBusinessSlot();
+
+        mvc.perform(get("/booking/{tenantSlug}", tenant.slug()))
+                .andExpect(status().isOk());
+        mvc.perform(get("/booking/index.html"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/booking/app.js"))
+                .andExpect(status().isOk());
+        mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug())
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenant_slug").value(tenant.slug()))
+                .andExpect(jsonPath("$.services[0].id").value(serviceId));
+
+        mvc.perform(post("/booking/api/{tenantSlug}/reservations", tenant.slug())
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "service_id": "%s",
+                                  "starts_at": "%s",
+                                  "customer_name": "LINE customer",
+                                  "idempotency_key": "web-booking-idempotency-0001"
+                                }
+                                """
+                                .formatted(serviceId, slot)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.line_user_id").value("U-booking-page"))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        mvc.perform(post("/booking/api/{tenantSlug}/reservations", tenant.slug())
+                        .header(
+                                "Authorization",
+                                "Bearer " + bookingAccessTokens.issue(
+                                        tenant.id(), tenant.slug(), "U-second-booking-page"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "service_id": "%s",
+                                  "starts_at": "%s",
+                                  "customer_name": "Second customer",
+                                  "idempotency_key": "web-booking-idempotency-0002"
+                                }
+                                """
+                                .formatted(serviceId, slot)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail")
+                        .value("The selected slot is no longer available"));
+
+        mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug())
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug()))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -425,6 +641,37 @@ class ApplicationIntegrationTest {
         assertThat(event.status()).isEqualTo("FAILED");
         assertThat(lineRepository.findReadyEventIds(firstClaim.plusSeconds(10), 20))
                 .doesNotContain(eventId);
+    }
+
+    @Test
+    void processorRetriesWhenTenantBecomesUnavailable() throws Exception {
+        Tenant tenant = createTenant("inactive-line-event");
+        String eventId = UUID.randomUUID().toString();
+        lineRepository.insertEvent(
+                eventId,
+                tenant.id(),
+                "inactive-tenant-webhook-event",
+                "message",
+                "U-inactive",
+                """
+                {
+                  "type": "message",
+                  "replyToken": "inactive-reply-token",
+                  "source": {"type": "user", "userId": "U-inactive"},
+                  "message": {"id": "3", "type": "text", "text": "hello"}
+                }
+                """,
+                Instant.now().minusSeconds(1));
+        jdbc.sql("update tenants set active = false where id = :id")
+                .param("id", tenant.id())
+                .update();
+
+        assertThat(lineRepository.claimEvent(eventId, Instant.now())).isTrue();
+        lineEventProcessor.process(eventId);
+
+        var event = lineRepository.findEvent(eventId).orElseThrow();
+        assertThat(event.status()).isEqualTo("RETRY");
+        assertThat(event.attempts()).isEqualTo(1);
     }
 
     @Test

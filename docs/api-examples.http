@@ -73,6 +73,29 @@ X-Tenant-Api-Key: {{tenantKey}}
 POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/reservations/{{reservationId}}/cancel
 X-Tenant-Api-Key: {{tenantKey}}
 
+### Public booking page APIs
+# The short-lived booking token is issued only from a LINE conversation link.
+# Open: {{baseUrl}}/booking/{tenantSlug}#token={bookingToken}
+
+GET {{baseUrl}}/booking/api/{tenantSlug}/bootstrap
+Authorization: Bearer {{bookingToken}}
+
+###
+GET {{baseUrl}}/booking/api/{tenantSlug}/availability?service_id={{serviceId}}&local_date=2026-08-03
+Authorization: Bearer {{bookingToken}}
+
+###
+POST {{baseUrl}}/booking/api/{tenantSlug}/reservations
+Authorization: Bearer {{bookingToken}}
+Content-Type: application/json
+
+{
+  "service_id": "{{serviceId}}",
+  "starts_at": "2026-08-03T10:00:00+08:00",
+  "customer_name": "王小明",
+  "idempotency_key": "web-demo-booking-0001"
+}
+
 ### List datasets - a draft dataset is created with each tenant
 GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/datasets
 X-Tenant-Api-Key: {{tenantKey}}

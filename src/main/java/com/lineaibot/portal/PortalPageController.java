@@ -10,4 +10,9 @@ public class PortalPageController {
     String portal() {
         return "forward:/portal/index.html";
     }
+
+    @GetMapping("/booking/{tenantSlug:[a-z0-9][a-z0-9-]*}")
+    String booking() {
+        return "forward:/booking/index.html";
+    }
 }
