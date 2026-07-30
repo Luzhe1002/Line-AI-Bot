@@ -2,6 +2,8 @@ package com.lineaibot.line;
 
 import com.lineaibot.booking.BookingManager;
 import com.lineaibot.booking.BookingRepository;
+import com.lineaibot.booking.BookingAccessTokenService;
+import com.lineaibot.config.AppProperties;
 import com.lineaibot.knowledge.KnowledgeService;
 import com.lineaibot.shared.ApiException;
 import com.lineaibot.tenant.TenantRepository.TenantRow;
@@ -33,6 +35,8 @@ public class ConversationService {
     private final KnowledgeService knowledge;
     private final LineRepository repository;
     private final ObjectMapper objectMapper;
+    private final BookingAccessTokenService bookingAccessTokens;
+    private final AppProperties properties;
 
     public ConversationService(
             IntentClassifier classifier,
@@ -40,13 +44,17 @@ public class ConversationService {
             BookingRepository bookingRepository,
             KnowledgeService knowledge,
             LineRepository repository,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            BookingAccessTokenService bookingAccessTokens,
+            AppProperties properties) {
         this.classifier = classifier;
         this.bookings = bookings;
         this.bookingRepository = bookingRepository;
         this.knowledge = knowledge;
         this.repository = repository;
         this.objectMapper = objectMapper;
+        this.bookingAccessTokens = bookingAccessTokens;
+        this.properties = properties;
     }
 
     public List<Map<String, Object>> handleText(
@@ -55,7 +63,7 @@ public class ConversationService {
         List<Map<String, Object>> messages = switch (classifier.classify(text)) {
             case HUMAN_HANDOFF ->
                     createHandoff(tenant, lineUserId, "使用者要求人工客服");
-            case BOOKING -> bookingOptions(tenant);
+            case BOOKING -> bookingOptions(tenant, lineUserId);
             case CANCEL_BOOKING -> cancellationOptions(tenant, lineUserId);
             case KNOWLEDGE -> knowledgeAnswer(tenant, lineUserId, text);
         };
@@ -80,7 +88,7 @@ public class ConversationService {
         return messages;
     }
 
-    private List<Map<String, Object>> bookingOptions(TenantRow tenant) {
+    private List<Map<String, Object>> bookingOptions(TenantRow tenant, String lineUserId) {
         var services = bookingRepository.findActiveServices(tenant.id());
         if (services.isEmpty()) {
             return List.of(textMessage("商家尚未設定可預約服務，請聯絡人工客服。"));
@@ -91,6 +99,18 @@ public class ConversationService {
             return List.of(textMessage("未來兩週目前沒有可預約時段，請聯絡人工客服。"));
         }
         List<Map<String, Object>> items = new ArrayList<>();
+        String token = bookingAccessTokens.issue(tenant.id(), tenant.slug(), lineUserId);
+        String bookingUrl = properties.getPublicBaseUrl().replaceAll("/+$", "")
+                + "/booking/"
+                + tenant.slug()
+                + "#token="
+                + URLEncoder.encode(token, StandardCharsets.UTF_8);
+        items.add(Map.of(
+                "type", "action",
+                "action", Map.of(
+                        "type", "uri",
+                        "label", "開啟預約頁",
+                        "uri", bookingUrl)));
         ZoneId zone = ZoneId.of(tenant.timezone());
         for (var slot : slots) {
             String label = SLOT_LABEL.format(slot.startsAt().atZone(zone));

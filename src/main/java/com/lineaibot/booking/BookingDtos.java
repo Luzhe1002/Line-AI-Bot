@@ -20,6 +20,21 @@ public final class BookingDtos {
             String timezone,
             List<AvailabilitySlot> slots) {}
 
+    public record PublicBookingService(String id, String name, String description) {}
+
+    public record PublicBookingBootstrap(
+            String tenantName,
+            String tenantSlug,
+            String timezone,
+            int slotMinutes,
+            List<PublicBookingService> services) {}
+
+    public record PublicReservationCreate(
+            @NotBlank String serviceId,
+            OffsetDateTime startsAt,
+            @NotBlank @Size(max = 160) String customerName,
+            @Size(min = 8, max = 128) String idempotencyKey) {}
+
     public record ReservationCreate(
             @NotBlank String serviceId,
             @NotBlank @Size(max = 64) String lineUserId,

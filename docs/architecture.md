@@ -58,6 +58,16 @@ flowchart LR
 
 ## 預約一致性
 
+### LINE 行動預約頁
+
+- 單一商家同時只服務一位顧客，所有入口沿用 `tenant_id + active_slot_key` 唯一限制。
+- 使用者在 LINE 輸入預約後，可由 Quick Reply 開啟 `/booking/{tenantSlug}`。
+- 預約連結包含 30 分鐘有效、加密且不可竄改的身分憑證；憑證綁定商家與 LINE 使用者。
+- 憑證放在 URL fragment，瀏覽器載入後立即移入 `sessionStorage` 並清除網址。
+- `/booking/api/{tenantSlug}/*` 從 Bearer 憑證取得商家與 LINE 使用者，不接受前端自行指定身分。
+- 頁面顯示的時段僅供選擇；確認時仍由 `BookingManager` 重新驗證並建立預約。
+- 時段衝突回傳 `409`，頁面保留服務及日期並重新載入可用時段。
+
 - 商家設定固定 `slot_minutes`。
 - 開始時間必須在未來、落在該日營業時間內，且對齊時段。
 - `tenant_id + idempotency_key` 防止相同請求重複建立。

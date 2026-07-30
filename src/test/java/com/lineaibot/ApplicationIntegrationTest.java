@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.lineaibot.booking.BookingAccessTokenService;
 import com.lineaibot.line.LineEventProcessor;
 import com.lineaibot.line.LineRepository;
 import java.nio.charset.StandardCharsets;
@@ -58,6 +59,9 @@ class ApplicationIntegrationTest {
 
     @Autowired
     private LineEventProcessor lineEventProcessor;
+
+    @Autowired
+    private BookingAccessTokenService bookingAccessTokens;
 
     @Autowired
     private JdbcClient jdbc;
@@ -413,6 +417,64 @@ class ApplicationIntegrationTest {
                                 """
                                 .formatted(serviceId, slot)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void lineBookingPageUsesShortLivedIdentityAndRechecksTheSlot() throws Exception {
+        Tenant tenant = createTenant("public-booking");
+        String token = bookingAccessTokens.issue(tenant.id(), tenant.slug(), "U-booking-page");
+        String authorization = "Bearer " + token;
+        String serviceId = firstId(getJson(
+                "/api/v1/tenants/" + tenant.id() + "/booking-services",
+                tenant.apiKey()));
+        Instant slot = nextBusinessSlot();
+
+        mvc.perform(get("/booking/{tenantSlug}", tenant.slug()))
+                .andExpect(status().isOk());
+        mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug())
+                        .header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenant_slug").value(tenant.slug()))
+                .andExpect(jsonPath("$.services[0].id").value(serviceId));
+
+        mvc.perform(post("/booking/api/{tenantSlug}/reservations", tenant.slug())
+                        .header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "service_id": "%s",
+                                  "starts_at": "%s",
+                                  "customer_name": "LINE customer",
+                                  "idempotency_key": "web-booking-idempotency-0001"
+                                }
+                                """
+                                .formatted(serviceId, slot)))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.line_user_id").value("U-booking-page"))
+                .andExpect(jsonPath("$.status").value("CONFIRMED"));
+
+        mvc.perform(post("/booking/api/{tenantSlug}/reservations", tenant.slug())
+                        .header(
+                                "Authorization",
+                                "Bearer " + bookingAccessTokens.issue(
+                                        tenant.id(), tenant.slug(), "U-second-booking-page"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "service_id": "%s",
+                                  "starts_at": "%s",
+                                  "customer_name": "Second customer",
+                                  "idempotency_key": "web-booking-idempotency-0002"
+                                }
+                                """
+                                .formatted(serviceId, slot)))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail")
+                        .value("The selected slot is no longer available"));
+
+        mvc.perform(get("/booking/api/{tenantSlug}/bootstrap", tenant.slug())
+                        .header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
