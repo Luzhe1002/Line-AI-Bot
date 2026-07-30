@@ -24,6 +24,8 @@ public class LineRepository {
             String status,
             int attempts) {}
 
+    public record OutboxDeliveryRow(String id, String status, String payloadJson) {}
+
     private final JdbcClient jdbc;
 
     public LineRepository(JdbcClient jdbc) {
@@ -217,14 +219,34 @@ public class LineRepository {
             String deliveryType,
             String payloadJson,
             Instant createdAt) {
+        return insertOutbox(
+                tenantId,
+                lineUserId,
+                replyToken,
+                deliveryType,
+                payloadJson,
+                null,
+                createdAt);
+    }
+
+    public String insertOutbox(
+            String tenantId,
+            String lineUserId,
+            String replyToken,
+            String deliveryType,
+            String payloadJson,
+            String dedupeKey,
+            Instant createdAt) {
         String id = UUID.randomUUID().toString();
         jdbc.sql("""
                         insert into outbox_messages (
                             id, tenant_id, line_user_id, reply_token, delivery_type,
-                            payload_json, status, attempts, error, created_at, sent_at
+                            payload_json, status, attempts, error, created_at, sent_at,
+                            dedupe_key
                         ) values (
                             :id, :tenantId, :lineUserId, :replyToken, :deliveryType,
-                            :payloadJson, 'PENDING', 0, null, :createdAt, null
+                            :payloadJson, 'PENDING', 0, null, :createdAt, null,
+                            :dedupeKey
                         )
                         """)
                 .param("id", id)
@@ -233,9 +255,26 @@ public class LineRepository {
                 .param("replyToken", replyToken)
                 .param("deliveryType", deliveryType)
                 .param("payloadJson", payloadJson)
+                .param("dedupeKey", dedupeKey)
                 .param("createdAt", utc(createdAt))
                 .update();
         return id;
+    }
+
+    public Optional<OutboxDeliveryRow> findOutboxByDedupeKey(String dedupeKey) {
+        if (dedupeKey == null) {
+            return Optional.empty();
+        }
+        return jdbc.sql("""
+                        select id, status, payload_json from outbox_messages
+                        where dedupe_key = :dedupeKey
+                        """)
+                .param("dedupeKey", dedupeKey)
+                .query((rs, rowNum) -> new OutboxDeliveryRow(
+                        rs.getString("id"),
+                        rs.getString("status"),
+                        rs.getString("payload_json")))
+                .optional();
     }
 
     public Optional<String> findLatestFailedReplyPayload(

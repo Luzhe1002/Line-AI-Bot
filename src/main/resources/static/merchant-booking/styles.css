@@ -1,0 +1,70 @@
+:root {
+  --ink: #17211c;
+  --muted: #68746d;
+  --paper: #f5f5ef;
+  --card: #fffefa;
+  --line: #dfe1da;
+  --green: #145b41;
+  --mint: #e0efe4;
+  --coral: #b84d36;
+  font-family: Inter, "Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif;
+  color: var(--ink);
+  background: var(--paper);
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: var(--paper); }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+button:disabled { cursor: wait; opacity: .55; }
+.hidden { display: none !important; }
+.shell { width: min(760px, 100%); margin: 0 auto; padding: 24px 16px 80px; }
+.topbar { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 10px 2px 24px; }
+.eyebrow { margin: 0 0 6px; color: #2d775c; font-size: 11px; font-weight: 900; letter-spacing: .13em; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: 7px; font-size: clamp(28px, 8vw, 42px); letter-spacing: -.04em; }
+h2 { margin-bottom: 5px; font-size: 23px; letter-spacing: -.025em; }
+.muted { margin-bottom: 0; color: var(--muted); line-height: 1.55; }
+.badge { flex: 0 0 auto; padding: 8px 11px; border-radius: 999px; background: var(--mint); color: var(--green); font-size: 11px; font-weight: 900; }
+.panel, .metric, .booking-card { border: 1px solid var(--line); border-radius: 18px; background: var(--card); box-shadow: 0 10px 30px rgba(35, 51, 42, .06); }
+.panel { padding: 18px; }
+.panel.error { border-color: #e6b5aa; background: #fff2ef; color: #7e3424; }
+.date-toolbar { display: grid; grid-template-columns: auto 1fr auto auto; align-items: end; gap: 10px; }
+label { display: grid; gap: 7px; color: #35443b; font-size: 12px; font-weight: 800; }
+input, select { width: 100%; padding: 12px 13px; border: 1px solid #d5d9d3; border-radius: 11px; background: white; color: var(--ink); }
+.primary, .secondary, .danger, .icon-button { border-radius: 11px; padding: 12px 15px; border: 1px solid transparent; font-weight: 850; }
+.primary { background: var(--green); color: white; }
+.secondary { border-color: var(--line); background: white; color: var(--ink); }
+.danger { border-color: #efc3b9; background: #fff2ef; color: #993d29; }
+.icon-button { width: 44px; border-color: var(--line); background: white; color: var(--green); font-size: 25px; }
+.summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 12px; }
+.metric { display: grid; gap: 12px; padding: 16px; }
+.metric span { color: var(--muted); font-size: 12px; }
+.metric strong { font-size: 28px; }
+.section { margin-top: 34px; }
+.section-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 13px; }
+.card-list { display: grid; gap: 10px; }
+.booking-card { padding: 17px; }
+.booking-card.cancelled { opacity: .62; }
+.booking-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.booking-time { display: block; color: var(--green); font-size: 15px; font-weight: 900; }
+.booking-card h3 { margin: 8px 0 5px; font-size: 19px; }
+.booking-meta { margin-bottom: 0; color: var(--muted); font-size: 13px; }
+.booking-actions { display: flex; justify-content: flex-end; margin-top: 14px; }
+.status { padding: 5px 8px; border-radius: 999px; background: var(--mint); color: var(--green); font-size: 10px; font-weight: 900; }
+.status.cancelled { background: #f4e6e1; color: #8a4a3a; }
+.empty { padding: 35px 16px; border: 1px dashed #cfd4cd; border-radius: 16px; color: var(--muted); text-align: center; }
+.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.wide { grid-column: 1 / -1; }
+.toast { position: fixed; right: 16px; bottom: 16px; z-index: 20; max-width: calc(100% - 32px); padding: 13px 16px; border-radius: 12px; background: var(--ink); color: white; opacity: 0; transform: translateY(10px); pointer-events: none; transition: .2s; }
+.toast.show { opacity: 1; transform: none; }
+.toast.error { background: #903d2b; }
+
+@media (max-width: 560px) {
+  .date-toolbar { grid-template-columns: auto 1fr auto; }
+  #today-button { grid-column: 1 / -1; }
+  .summary-grid { gap: 7px; }
+  .metric { padding: 13px; }
+  .metric strong { font-size: 24px; }
+  .form-grid { grid-template-columns: 1fr; }
+  .wide { grid-column: auto; }
+}

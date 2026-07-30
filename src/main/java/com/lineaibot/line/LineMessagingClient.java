@@ -84,6 +84,27 @@ public class LineMessagingClient {
                 .orElse(false);
     }
 
+    public void push(
+            String tenantId,
+            String channelAccessToken,
+            String lineUserId,
+            List<Map<String, Object>> messages,
+            String dedupeKey) {
+        if (messages.isEmpty() || messages.size() > 5) {
+            throw new IllegalArgumentException(
+                    "LINE push must contain between one and five messages");
+        }
+        deliver(
+                tenantId,
+                channelAccessToken,
+                null,
+                lineUserId,
+                "PUSH",
+                messages,
+                toJson(messages),
+                dedupeKey);
+    }
+
     private void deliver(
             String tenantId,
             String channelAccessToken,
@@ -92,8 +113,50 @@ public class LineMessagingClient {
             String deliveryType,
             Object messages,
             String payload) {
-        String outboxId = repository.insertOutbox(
-                tenantId, lineUserId, replyToken, deliveryType, payload, Instant.now());
+        deliver(
+                tenantId,
+                channelAccessToken,
+                replyToken,
+                lineUserId,
+                deliveryType,
+                messages,
+                payload,
+                null);
+    }
+
+    private void deliver(
+            String tenantId,
+            String channelAccessToken,
+            String replyToken,
+            String lineUserId,
+            String deliveryType,
+            Object messages,
+            String payload,
+            String dedupeKey) {
+        var existing = repository.findOutboxByDedupeKey(dedupeKey);
+        if (existing.isPresent()
+                && ("SENT".equals(existing.get().status())
+                        || "SIMULATED".equals(existing.get().status()))) {
+            return;
+        }
+        Object deliveryMessages = messages;
+        if (existing.isPresent()) {
+            try {
+                deliveryMessages = objectMapper.readTree(existing.get().payloadJson());
+            } catch (JacksonException exception) {
+                throw new IllegalStateException(
+                        "Unable to deserialize deduplicated LINE payload", exception);
+            }
+        }
+        String outboxId = existing.map(LineRepository.OutboxDeliveryRow::id)
+                .orElseGet(() -> repository.insertOutbox(
+                        tenantId,
+                        lineUserId,
+                        replyToken,
+                        deliveryType,
+                        payload,
+                        dedupeKey,
+                        Instant.now()));
         if (!properties.isLineApiEnabled()) {
             repository.markOutboxSent(outboxId, "SIMULATED", Instant.now());
             return;
@@ -108,8 +171,8 @@ public class LineMessagingClient {
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("Authorization", "Bearer " + channelAccessToken)
                     .body(push
-                            ? Map.of("to", lineUserId, "messages", messages)
-                            : Map.of("replyToken", replyToken, "messages", messages))
+                            ? Map.of("to", lineUserId, "messages", deliveryMessages)
+                            : Map.of("replyToken", replyToken, "messages", deliveryMessages))
                     .retrieve()
                     .toBodilessEntity();
             repository.markOutboxSent(outboxId, "SENT", Instant.now());

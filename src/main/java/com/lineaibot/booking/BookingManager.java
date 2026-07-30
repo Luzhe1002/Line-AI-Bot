@@ -24,10 +24,18 @@ public class BookingManager {
 
     private final BookingRepository repository;
     private final ReservationWriter writer;
+    private final BookingBlockWriter blockWriter;
+    private final BookingEventRepository events;
 
-    public BookingManager(BookingRepository repository, ReservationWriter writer) {
+    public BookingManager(
+            BookingRepository repository,
+            ReservationWriter writer,
+            BookingBlockWriter blockWriter,
+            BookingEventRepository events) {
         this.repository = repository;
         this.writer = writer;
+        this.blockWriter = blockWriter;
+        this.events = events;
     }
 
     public List<AvailabilitySlot> listAvailableSlots(
@@ -121,7 +129,7 @@ public class BookingManager {
                 now,
                 null);
         try {
-            writer.insert(reservation);
+            writer.insert(reservation, "CUSTOMER", lineUserId);
             return reservation;
         } catch (DataIntegrityViolationException exception) {
             return repository.findByIdempotency(tenant.id(), idempotencyKey)
@@ -134,6 +142,27 @@ public class BookingManager {
     @Transactional
     public ReservationRead cancelReservation(
             String tenantId, String reservationId, String lineUserId) {
+        return cancelReservation(
+                tenantId,
+                reservationId,
+                lineUserId,
+                lineUserId == null ? "TENANT_API" : "CUSTOMER",
+                lineUserId);
+    }
+
+    @Transactional
+    public ReservationRead cancelReservationAsStaff(
+            String tenantId, String reservationId, String staffId) {
+        return cancelReservation(
+                tenantId, reservationId, null, "STAFF", staffId);
+    }
+
+    private ReservationRead cancelReservation(
+            String tenantId,
+            String reservationId,
+            String lineUserId,
+            String actorType,
+            String actorId) {
         ReservationRead reservation = repository.findById(tenantId, reservationId, lineUserId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "Reservation not found"));
@@ -142,6 +171,22 @@ public class BookingManager {
         }
         Instant cancelledAt = Instant.now();
         repository.cancel(tenantId, reservationId, cancelledAt);
+        events.insertEvent(
+                tenantId,
+                reservationId,
+                "RESERVATION_CANCELLED",
+                actorType,
+                actorId,
+                cancelledAt);
+        events.insertActivity(
+                tenantId,
+                reservationId,
+                null,
+                "RESERVATION_CANCELLED",
+                actorType,
+                actorId,
+                null,
+                cancelledAt);
         return new ReservationRead(
                 reservation.id(),
                 reservation.tenantId(),
@@ -154,6 +199,62 @@ public class BookingManager {
                 reservation.idempotencyKey(),
                 reservation.createdAt(),
                 cancelledAt);
+    }
+
+    public ReservationRead requireReservation(String tenantId, String reservationId) {
+        return repository.findById(tenantId, reservationId, null)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "Reservation not found"));
+    }
+
+    public BookingRepository.BookingBlockRow blockSlot(
+            TenantRow tenant, Instant startsAt, String reason, String staffId) {
+        validateSlotAlignment(tenant, startsAt);
+        Instant createdAt = Instant.now();
+        try {
+            return blockWriter.insert(
+                    tenant.id(),
+                    startsAt,
+                    startsAt.plus(tenant.slotMinutes(), ChronoUnit.MINUTES),
+                    reason == null || reason.isBlank() ? null : reason.strip(),
+                    staffId,
+                    createdAt);
+        } catch (DataIntegrityViolationException exception) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT, "The selected slot is no longer available");
+        }
+    }
+
+    @Transactional
+    public BookingRepository.BookingBlockRow releaseBlock(
+            String tenantId, String blockId, String staffId) {
+        var block = repository.findBlock(tenantId, blockId)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "Booking block not found"));
+        if (!block.active()) {
+            return block;
+        }
+        Instant releasedAt = Instant.now();
+        repository.releaseBlock(tenantId, blockId, releasedAt);
+        events.insertActivity(
+                tenantId,
+                null,
+                blockId,
+                "SLOT_UNBLOCKED",
+                "STAFF",
+                staffId,
+                block.reason(),
+                releasedAt);
+        return new BookingRepository.BookingBlockRow(
+                block.id(),
+                block.tenantId(),
+                block.startsAt(),
+                block.endsAt(),
+                block.reason(),
+                false,
+                block.createdByStaffId(),
+                block.createdAt(),
+                releasedAt);
     }
 
     public List<ReservationRead> listReservations(String tenantId) {
@@ -172,6 +273,10 @@ public class BookingManager {
     }
 
     private void validateSlot(TenantRow tenant, Instant startsAt) {
+        validateSlotAlignment(tenant, startsAt);
+    }
+
+    private void validateSlotAlignment(TenantRow tenant, Instant startsAt) {
         Instant now = Instant.now();
         if (!startsAt.isAfter(now)) {
             throw new ApiException(

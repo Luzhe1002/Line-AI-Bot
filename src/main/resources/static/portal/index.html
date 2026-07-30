@@ -74,7 +74,8 @@
         <button class="nav-item active" data-view="overview"><span>01</span>總覽</button>
         <button class="nav-item" data-view="knowledge"><span>02</span>知識庫</button>
         <button class="nav-item" data-view="tester"><span>03</span>回答測試</button>
-        <button class="nav-item" data-view="settings"><span>04</span>LINE 設定</button>
+        <button class="nav-item" data-view="staff"><span>04</span>店家人員</button>
+        <button class="nav-item" data-view="settings"><span>05</span>LINE 設定</button>
       </nav>
       <div class="sidebar-foot">
         <div id="merchant-mini"></div>
@@ -166,6 +167,43 @@
             <h3>測試結果會顯示在這裡</h3>
             <p class="muted">有可靠資料才回答；資料不足時應轉接人工客服。</p>
           </article>
+        </div>
+      </section>
+
+      <section id="view-staff" class="view hidden">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">MERCHANT STAFF</p>
+            <h2>把店家人員的 LINE 綁定成管理入口</h2>
+            <p class="muted">不需要第二個 LINE 官方帳號。店家人員以自己的私人 LINE 加入目前官方帳號，再傳送單次綁定指令。</p>
+          </div>
+        </div>
+        <div class="content-grid">
+          <form id="staff-link-form" class="panel stack">
+            <div><p class="eyebrow">NEW STAFF LINK</p><h3>產生單次綁定碼</h3></div>
+            <label>人員名稱<input name="display_name" required maxlength="160" placeholder="例如：王店長"></label>
+            <label>權限
+              <select name="role">
+                <option value="OWNER">擁有者：可管理人員與預約</option>
+                <option value="MANAGER">管理員：可管理預約</option>
+                <option value="VIEWER">檢視者：只能查看</option>
+              </select>
+            </label>
+            <button class="primary" type="submit">產生綁定碼</button>
+            <p class="fine-print">綁定碼十分鐘內有效且只能使用一次。請勿把擁有者綁定碼交給不受信任的人。</p>
+          </form>
+          <div>
+            <article id="staff-link-result" class="panel hidden">
+              <p class="eyebrow">BIND IN LINE</p>
+              <h3>請在商家官方帳號聊天室傳送</h3>
+              <div class="copy-field"><code id="staff-link-command"></code><button id="copy-staff-link" class="secondary" type="button">複製</button></div>
+              <p id="staff-link-expiry" class="muted"></p>
+            </article>
+            <div class="panel staff-panel">
+              <div class="panel-head"><div><p class="eyebrow">LINKED STAFF</p><h3>已綁定人員</h3></div><button id="refresh-staff" class="secondary" type="button">重新整理</button></div>
+              <div id="staff-list" class="staff-list"></div>
+            </div>
+          </div>
         </div>
       </section>
 
