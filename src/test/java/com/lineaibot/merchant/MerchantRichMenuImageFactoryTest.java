@@ -40,6 +40,6 @@ class MerchantRichMenuImageFactoryTest {
     @Test
     void usesAVersionedChineseMenuNameInsteadOfReusingTheEnglishMenu() {
         assertThat(MerchantRichMenuService.menuName("tenant-1", "OWNER"))
-                .isEqualTo("line-ai-bot-staff-tenant-1-owner-zh-tw-v1");
+                .isEqualTo("line-ai-bot-staff-tenant-1-owner-zh-tw-v2");
     }
 }

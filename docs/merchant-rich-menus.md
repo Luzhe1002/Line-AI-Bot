@@ -34,7 +34,9 @@ LINE 電腦版不顯示 Rich Menu。管理者可改用文字指令 `管理預約
 
 LINE 不允許替換已設定在 Rich Menu 上的圖片，因此不能在既有 ID 上重傳中文圖。
 `V5__replace_staff_rich_menus_with_chinese_version.sql` 會清除舊 ID、增加同步 revision，
-再由 Worker 以版本化名稱建立中文選單。已綁定人員會自動切換，不需要重新綁定
+再由 Worker 以版本化名稱建立中文選單。`V6__force_chinese_staff_rich_menu_v2.sql`
+會再建立一個全新的 `zh-tw-v2` 選單 ID，避免 LINE 客戶端延用首次上線時的
+選單物件或圖片快取。已綁定人員會自動切換，不需要重新綁定
 LINE；舊選單不再綁定任何人員。
 
 角色或狀態更新會增加 revision 並重新標記 READY。進行中的舊工作只能更新相同

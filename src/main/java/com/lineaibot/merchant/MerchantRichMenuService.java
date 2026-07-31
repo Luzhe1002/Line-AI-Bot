@@ -16,7 +16,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class MerchantRichMenuService {
 
     private static final Logger log = LoggerFactory.getLogger(MerchantRichMenuService.class);
-    private static final String MENU_REVISION = "zh-tw-v1";
+    private static final String MENU_REVISION = "zh-tw-v2";
     private static final int HALF_WIDTH = MerchantRichMenuImageFactory.WIDTH / 2;
     private static final int HALF_HEIGHT = MerchantRichMenuImageFactory.HEIGHT / 2;
 
