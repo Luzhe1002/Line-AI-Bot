@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css">
-  <script src="/portal/app.js" defer></script>
+  <link rel="stylesheet" href="/portal/styles.css?v=20260731">
+  <script src="/shared/ui-utils.js?v=20260731" defer></script>
+  <script src="/portal/app.js?v=20260731" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -25,12 +26,14 @@
     </section>
 
     <section class="auth-card">
-      <div class="auth-tabs" role="tablist">
-        <button class="tab-button active" data-auth-tab="login">商家登入</button>
-        <button class="tab-button" data-auth-tab="onboard">建立商家</button>
+      <div class="auth-tabs" role="tablist" aria-label="商家帳號">
+        <button id="auth-tab-login" class="tab-button active" data-auth-tab="login" type="button"
+          role="tab" aria-selected="true" aria-controls="login-form" tabindex="0">商家登入</button>
+        <button id="auth-tab-onboard" class="tab-button" data-auth-tab="onboard" type="button"
+          role="tab" aria-selected="false" aria-controls="onboard-form" tabindex="-1">建立商家</button>
       </div>
 
-      <form id="login-form" class="stack">
+      <form id="login-form" class="stack" role="tabpanel" aria-labelledby="auth-tab-login">
         <div>
           <p class="eyebrow">WELCOME BACK</p>
           <h2>回到工作台</h2>
@@ -41,7 +44,7 @@
         <button class="primary" type="submit">安全登入</button>
       </form>
 
-      <form id="onboard-form" class="stack hidden">
+      <form id="onboard-form" class="stack hidden" role="tabpanel" aria-labelledby="auth-tab-onboard">
         <div>
           <p class="eyebrow">NEW MERCHANT</p>
           <h2>建立商家空間</h2>
@@ -71,11 +74,11 @@
     <aside class="sidebar">
       <a href="/portal/" class="logo"><span class="brand-mark small">店</span><span>AI 工作台</span></a>
       <nav>
-        <button class="nav-item active" data-view="overview"><span>01</span>總覽</button>
-        <button class="nav-item" data-view="knowledge"><span>02</span>知識庫</button>
-        <button class="nav-item" data-view="tester"><span>03</span>回答測試</button>
-        <button class="nav-item" data-view="staff"><span>04</span>店家人員</button>
-        <button class="nav-item" data-view="settings"><span>05</span>LINE 設定</button>
+        <button class="nav-item active" data-view="overview" type="button" aria-current="page"><span>01</span>總覽</button>
+        <button class="nav-item" data-view="knowledge" type="button"><span>02</span>知識庫</button>
+        <button class="nav-item" data-view="tester" type="button"><span>03</span>回答測試</button>
+        <button class="nav-item" data-view="staff" type="button"><span>04</span>店家人員</button>
+        <button class="nav-item" data-view="settings" type="button"><span>05</span>LINE 設定</button>
       </nav>
       <div class="sidebar-foot">
         <div id="merchant-mini"></div>
@@ -87,7 +90,7 @@
       <header class="topbar">
         <div>
           <p class="eyebrow" id="page-eyebrow">MERCHANT OVERVIEW</p>
-          <h1 id="page-title">今天，讓客服再可靠一點。</h1>
+          <h1 id="page-title" tabindex="-1">今天，讓客服再可靠一點。</h1>
         </div>
         <span id="system-pill" class="status-pill">讀取中</span>
       </header>

@@ -1,0 +1,12 @@
+{
+  "name": "line-ai-bot-frontend-tests",
+  "private": true,
+  "scripts": {
+    "test:ui:logic": "node --test --test-isolation=none tests/frontend/ui-utils.test.cjs",
+    "test:ui:e2e": "playwright test",
+    "test:ui": "npm run test:ui:logic && npm run test:ui:e2e"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
+  }
+}

@@ -5,8 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>店家預約管理</title>
-  <link rel="stylesheet" href="/merchant-booking/styles.css">
-  <script src="/merchant-booking/app.js" defer></script>
+  <link rel="stylesheet" href="/merchant-booking/styles.css?v=20260731-2">
+  <script src="/shared/ui-utils.js?v=20260731" defer></script>
+  <script src="/merchant-booking/app.js?v=20260731" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -21,8 +22,8 @@
       <span id="role-badge" class="badge">驗證中</span>
     </header>
 
-    <section id="error-panel" class="panel error hidden">
-      <h2>無法開啟管理頁</h2>
+    <section id="error-panel" class="panel error hidden" role="alert">
+      <h2 tabindex="-1">無法開啟管理頁</h2>
       <p id="error-message">請回到 LINE，重新點擊「開啟預約月曆」。</p>
     </section>
 
