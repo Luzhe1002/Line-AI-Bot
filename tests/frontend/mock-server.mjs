@@ -13,8 +13,8 @@ const mimeTypes = {
   ".json": "application/json; charset=utf-8",
 };
 
-function sendJson(response, status, body) {
-  response.writeHead(status, { "Content-Type": mimeTypes[".json"] });
+function sendJson(response, status, body, headers = {}) {
+  response.writeHead(status, { "Content-Type": mimeTypes[".json"], ...headers });
   response.end(JSON.stringify(body));
 }
 
@@ -32,6 +32,81 @@ async function readJson(request) {
   for await (const chunk of request) chunks.push(chunk);
   if (!chunks.length) return {};
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+}
+
+function portalApi(pathname, request, response) {
+  if (!pathname.startsWith("/portal/api/")) return false;
+  const endpoint = pathname.slice("/portal/api".length);
+  const authenticated = (request.headers.cookie || "").includes("portal-e2e=1");
+  const tenant = { id: "tenant-demo", name: "暖心咖啡", slug: "demo" };
+
+  if (endpoint === "/line-session" && request.method === "POST") {
+    sendJson(response, 200, {
+      authenticated: true,
+      csrf_token: "portal-csrf",
+      tenant,
+    }, { "Set-Cookie": "portal-e2e=1; Path=/; HttpOnly; SameSite=Lax" });
+    return true;
+  }
+  if (endpoint === "/session" && request.method === "GET") {
+    sendJson(response, 200, authenticated
+      ? { authenticated: true, csrf_token: "portal-csrf", tenant }
+      : { authenticated: false });
+    return true;
+  }
+  if (endpoint === "/session" && request.method === "DELETE") {
+    sendEmpty(response);
+    return true;
+  }
+  if (!authenticated) {
+    sendJson(response, 401, { detail: "請先登入商家工作台" });
+    return true;
+  }
+  if (endpoint === "/overview") {
+    sendJson(response, 200, {
+      tenant,
+      line_channel: {
+        configured: true,
+        enabled: true,
+        webhook_url: "https://example.test/webhooks/line/demo",
+      },
+      business_hours: [{ active: true }],
+      datasets: [{
+        id: "dataset-active",
+        name: "正式客服知識",
+        version: 3,
+        status: "ACTIVE",
+        published_at: "2026-07-31T08:00:00Z",
+      }],
+    });
+    return true;
+  }
+  if (endpoint === "/documents") {
+    sendJson(response, 200, [{
+      id: "document-1",
+      title: "預約與取消政策",
+      content: "顧客可透過 LINE 預約，若需要取消請提前聯絡店家。",
+      source_url: null,
+      index_status: "READY",
+    }]);
+    return true;
+  }
+  if (endpoint === "/staff") {
+    sendJson(response, 200, [{
+      id: "staff-owner",
+      display_name: "王店長",
+      role: "OWNER",
+      status: "ACTIVE",
+      notify_new_booking: true,
+      notify_cancellation: true,
+      daily_summary_enabled: true,
+      daily_summary_time: "08:00:00",
+      created_at: "2026-07-30T01:00:00Z",
+    }]);
+    return true;
+  }
+  sendJson(response, 404, { detail: "找不到商家工作台測試端點" });
+  return true;
 }
 
 function bookingApi(pathname, url, request, response) {
@@ -170,10 +245,7 @@ async function serveStatic(pathname, response) {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || `${host}:${port}`}`);
-  if (url.pathname === "/portal/api/session" && request.method === "GET") {
-    sendJson(response, 200, { authenticated: false });
-    return;
-  }
+  if (portalApi(url.pathname, request, response)) return;
   if (bookingApi(url.pathname, url, request, response)) return;
   if (merchantApi(url.pathname, url, request, response)) return;
   await serveStatic(url.pathname, response);

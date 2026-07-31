@@ -51,6 +51,36 @@ test("portal remains usable at 320px without iOS input zoom or horizontal overfl
   expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(4.5);
 });
 
+test("portal dashboard presents operational status and role-specific LINE entry", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+
+  await expect(page.locator("#app-view")).toBeVisible();
+  await expect(page.locator("#overview-status-title")).toHaveText("AI 客服已準備好服務顧客");
+  await expect(page.locator("#system-pill")).toHaveText("營運準備完成");
+  await expect(page.locator("#line-metric-value")).toHaveText("已連線");
+  await expect(page.locator("#document-count")).toHaveText("1");
+  await expect(page.locator("#staff-count")).toHaveText("1");
+
+  await page.getByRole("button", { name: "店家人員" }).click();
+  await expect(page.getByText("顯示「管理後台」，可進入完整工作台。").first()).toBeVisible();
+  await expect(page.locator(".staff-menu-note")).toContainText("管理後台");
+});
+
+test("portal operations dashboard stays within a 375px mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/portal/#token=e2e-token");
+
+  const metrics = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    metricColumns: getComputedStyle(document.querySelector(".metric-grid")).gridTemplateColumns,
+    navPosition: getComputedStyle(document.querySelector(".sidebar")).position,
+  }));
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
+  expect(metrics.metricColumns.trim().split(/\s+/)).toHaveLength(1);
+  expect(metrics.navPosition).toBe("fixed");
+});
+
 test("customer booking moves focus through the complete happy path", async ({ page }) => {
   await page.goto("/booking/demo/#token=e2e-token");
 

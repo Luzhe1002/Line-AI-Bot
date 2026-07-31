@@ -22,4 +22,18 @@ class MerchantRichMenuImageFactoryTest {
             assertThat(png.length).isLessThan(1_000_000);
         }
     }
+
+    @Test
+    void usesChineseLabelsForOwnerAndBookingManagementMenus() {
+        assertThat(MerchantRichMenuImageFactory.labelsForRole("OWNER"))
+                .containsExactly(
+                        "管理後台", "完整設定",
+                        "今日預約", "查看行程",
+                        "未來七天", "預約行程",
+                        "顧客預約", "建立預約");
+        assertThat(MerchantRichMenuImageFactory.labelsForRole("MANAGER"))
+                .startsWith("預約管理", "查看月曆");
+        assertThat(MerchantRichMenuImageFactory.labelsForRole("VIEWER"))
+                .startsWith("預約管理", "查看月曆");
+    }
 }

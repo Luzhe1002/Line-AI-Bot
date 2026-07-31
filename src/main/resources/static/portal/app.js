@@ -159,29 +159,56 @@ async function ensureEditableDataset() {
 function renderOverview() {
   const overview = state.overview;
   const hasLine = overview.line_channel.configured;
-  const hasHours = overview.business_hours.some((item) => item.active);
   const hasKnowledge = state.documents.some((item) => item.index_status === "READY");
   const activeDataset = overview.datasets.find((item) => item.status === "ACTIVE");
   const checks = [
-    [true, "商家空間", "基本資料與租戶隔離已建立"],
-    [hasLine, "LINE 官方帳號", hasLine ? "Channel 已安全連接" : "加入 Secret 與 Access Token"],
-    [hasHours, "營業與預約", hasHours ? "已有可用營業時間" : "設定服務時間"],
-    [hasKnowledge, "可信知識", hasKnowledge ? "已有完成索引的文件" : "加入第一份客服資料"],
+    { done: true, title: "商家空間", copy: "基本資料與租戶隔離已建立", view: "overview" },
+    { done: hasLine, title: "LINE 官方帳號", copy: hasLine ? "Channel 已安全連接" : "加入 Secret 與 Access Token", view: "settings" },
+    { done: hasKnowledge, title: "可信知識", copy: hasKnowledge ? "已有完成索引的文件" : "加入第一份客服資料", view: "knowledge" },
+    { done: Boolean(activeDataset), title: "發布客服知識", copy: activeDataset ? "顧客已能使用正式知識" : "測試後發布目前草稿", view: "knowledge" },
   ];
-  const progress = Math.round(checks.filter(([done]) => done).length / checks.length * 100);
+  const progress = Math.round(checks.filter((item) => item.done).length / checks.length * 100);
+  const activeStaff = state.staff.filter((staff) => staff.status === "ACTIVE").length;
+  const nextStep = checks.find((item) => !item.done);
+
   $("#progress-number").textContent = `${progress}%`;
   $("#progress-ring").style.background = `conic-gradient(var(--green) ${progress}%, #e5e7e2 ${progress}%)`;
   $("#document-count").textContent = state.documents.length;
+  $("#staff-count").textContent = activeStaff;
+  $("#staff-count-copy").textContent = state.staff.length
+    ? `${activeStaff} 位啟用，共 ${state.staff.length} 位`
+    : "尚未綁定 LINE 人員";
   $("#publish-state").textContent = activeDataset ? "已發布" : "草稿";
   $("#publish-time").textContent = activeDataset?.published_at
     ? new Date(activeDataset.published_at).toLocaleString("zh-TW")
     : "尚未發布";
-  $("#checklist").innerHTML = checks.map(([done, title, copy], index) => `
-    <article class="check-item ${done ? "done" : ""}">
-      <span class="check-icon">${done ? "✓" : index + 1}</span>
-      <strong>${title}</strong><p>${copy}</p>
-    </article>`).join("");
-  $("#system-pill").textContent = activeDataset ? "客服知識已上線" : "尚未發布知識";
+
+  $("#line-metric-value").textContent = hasLine
+    ? (overview.line_channel.enabled ? "已連線" : "已停用")
+    : "未設定";
+  $("#line-metric-copy").textContent = hasLine
+    ? (overview.line_channel.enabled ? "目前可接收與回覆訊息" : "憑證已保存，回覆功能停用")
+    : "尚未加入 Channel 憑證";
+  $("#line-metric-dot").className = `metric-dot ${hasLine && overview.line_channel.enabled ? "ready" : "off"}`;
+
+  $("#checklist").innerHTML = checks.map((item, index) => `
+    <button class="check-item ${item.done ? "done" : ""}" data-go-view="${item.view}" type="button">
+      <span class="check-icon">${item.done ? "✓" : index + 1}</span>
+      <span class="check-copy"><strong>${item.title}</strong><p>${item.copy}</p></span>
+      <span class="check-arrow" aria-hidden="true">›</span>
+    </button>`).join("");
+
+  const ready = hasLine && hasKnowledge && Boolean(activeDataset);
+  const banner = $("#overview-banner");
+  banner.classList.toggle("warning", !ready);
+  $("#overview-status-title").textContent = ready ? "AI 客服已準備好服務顧客" : "還有一個重要步驟需要完成";
+  $("#overview-status-copy").textContent = ready
+    ? `LINE 已連線，${state.documents.length} 份知識可供顧客查詢。`
+    : (nextStep?.copy || "請確認 LINE 與知識庫設定。");
+  const primaryAction = $("#overview-primary-action");
+  primaryAction.dataset.goView = nextStep?.view || "tester";
+  primaryAction.textContent = nextStep ? `前往${nextStep.title}` : "測試 AI 回答";
+  $("#system-pill").textContent = ready ? "營運準備完成" : `${progress}% 已完成`;
 }
 
 function renderDocuments() {
@@ -239,14 +266,21 @@ function editDocument(documentId) {
 function renderSettings() {
   const line = state.overview.line_channel;
   $("#webhook-url").textContent = line.webhook_url;
-  $("#line-status").textContent = line.configured
-    ? `已設定，${line.enabled ? "目前啟用中" : "目前停用"}`
+  const health = $("#channel-health-card");
+  health.classList.toggle("ready", line.configured && line.enabled);
+  health.classList.toggle("off", !line.configured || !line.enabled);
+  $("#channel-health-title").textContent = line.configured
+    ? (line.enabled ? "LINE Channel 已連線" : "LINE Channel 已停用")
     : "尚未連接 LINE Channel";
+  $("#line-status").textContent = line.configured
+    ? (line.enabled ? "Webhook 已建立，可接收與回覆顧客訊息。" : "憑證已保存，但目前不會回覆訊息。")
+    : "完成左側憑證設定後，再把 Webhook URL 貼到 LINE Developers Console。";
 }
 
 async function loadStaff() {
   state.staff = await api("/staff");
   renderStaff();
+  if (state.overview) renderOverview();
 }
 
 function renderStaff() {
@@ -255,36 +289,56 @@ function renderStaff() {
     list.innerHTML = `<div class="empty-state"><strong>尚未綁定店家人員</strong><p>先產生擁有者綁定碼，再到 LINE 完成綁定。</p></div>`;
     return;
   }
-  list.innerHTML = state.staff.map((staff) => `
-    <article class="staff-item" data-staff-id="${staff.id}">
+  const roleDescriptions = {
+    OWNER: "個人選單顯示「管理後台」，可進入完整工作台。",
+    MANAGER: "個人選單顯示「預約管理」，可取消預約與封鎖時段。",
+    VIEWER: "個人選單顯示「預約管理」，僅能查看行程。",
+  };
+  list.innerHTML = state.staff.map((staff) => {
+    const roleLabel = UiUtils.roleLabel(staff.role);
+    const statusLabel = staff.status === "ACTIVE" ? "啟用中" : "已停用";
+    const initial = escapeHtml((staff.display_name || "店").trim().slice(0, 1));
+    return `
+    <article class="staff-item" data-staff-id="${escapeHtml(staff.id)}">
       <div class="staff-item-head">
-        <div><strong>${escapeHtml(staff.display_name)}</strong><br><small>${new Date(staff.created_at).toLocaleString("zh-TW")}</small></div>
-        <span class="badge ${staff.status === "ACTIVE" ? "" : "failed"}">${staff.status}</span>
+        <div class="staff-identity">
+          <span class="staff-avatar" aria-hidden="true">${initial}</span>
+          <div>
+            <strong class="staff-name">${escapeHtml(staff.display_name)}</strong>
+            <div class="staff-meta"><span class="staff-role">${escapeHtml(roleLabel)}</span><small>${new Date(staff.created_at).toLocaleString("zh-TW")}</small></div>
+          </div>
+        </div>
+        <span class="badge status-label ${staff.status === "ACTIVE" ? "" : "failed"}">${statusLabel}</span>
       </div>
-      <div class="staff-fields">
-        <label>顯示名稱<input data-staff-field="display_name" maxlength="160" value="${escapeHtml(staff.display_name)}"></label>
-        <label>權限
-          <select data-staff-field="role">
-            <option value="OWNER" ${staff.role === "OWNER" ? "selected" : ""}>擁有者</option>
-            <option value="MANAGER" ${staff.role === "MANAGER" ? "selected" : ""}>管理員</option>
-            <option value="VIEWER" ${staff.role === "VIEWER" ? "selected" : ""}>檢視者</option>
-          </select>
-        </label>
-        <label>狀態
-          <select data-staff-field="status">
-            <option value="ACTIVE" ${staff.status === "ACTIVE" ? "selected" : ""}>啟用</option>
-            <option value="DISABLED" ${staff.status === "DISABLED" ? "selected" : ""}>停用</option>
-          </select>
-        </label>
-        <label>每日摘要時間<input data-staff-field="daily_summary_time" type="time" value="${escapeHtml((staff.daily_summary_time || "08:00").slice(0, 5))}"></label>
-      </div>
-      <div class="staff-checks">
-        <label><input data-staff-field="notify_new_booking" type="checkbox" ${staff.notify_new_booking ? "checked" : ""}>新預約通知</label>
-        <label><input data-staff-field="notify_cancellation" type="checkbox" ${staff.notify_cancellation ? "checked" : ""}>取消預約通知</label>
-        <label><input data-staff-field="daily_summary_enabled" type="checkbox" ${staff.daily_summary_enabled ? "checked" : ""}>每日預約摘要</label>
-      </div>
-      <div class="staff-item-actions"><button class="primary compact" data-save-staff type="button">儲存設定</button></div>
-    </article>`).join("");
+      <p class="staff-menu-note">${escapeHtml(roleDescriptions[staff.role] || "依角色顯示對應的 LINE 管理入口。")}</p>
+      <details class="staff-details">
+        <summary>調整權限與通知</summary>
+        <div class="staff-fields">
+          <label>顯示名稱<input data-staff-field="display_name" maxlength="160" value="${escapeHtml(staff.display_name)}"></label>
+          <label>權限
+            <select data-staff-field="role">
+              <option value="OWNER" ${staff.role === "OWNER" ? "selected" : ""}>擁有者</option>
+              <option value="MANAGER" ${staff.role === "MANAGER" ? "selected" : ""}>管理員</option>
+              <option value="VIEWER" ${staff.role === "VIEWER" ? "selected" : ""}>檢視者</option>
+            </select>
+          </label>
+          <label>狀態
+            <select data-staff-field="status">
+              <option value="ACTIVE" ${staff.status === "ACTIVE" ? "selected" : ""}>啟用</option>
+              <option value="DISABLED" ${staff.status === "DISABLED" ? "selected" : ""}>停用</option>
+            </select>
+          </label>
+          <label>每日摘要時間<input data-staff-field="daily_summary_time" type="time" value="${escapeHtml((staff.daily_summary_time || "08:00").slice(0, 5))}"></label>
+        </div>
+        <div class="staff-checks">
+          <label><input data-staff-field="notify_new_booking" type="checkbox" ${staff.notify_new_booking ? "checked" : ""}>新預約通知</label>
+          <label><input data-staff-field="notify_cancellation" type="checkbox" ${staff.notify_cancellation ? "checked" : ""}>取消預約通知</label>
+          <label><input data-staff-field="daily_summary_enabled" type="checkbox" ${staff.daily_summary_enabled ? "checked" : ""}>每日預約摘要</label>
+        </div>
+        <div class="staff-item-actions"><button class="primary compact" data-save-staff type="button">儲存設定</button></div>
+      </details>
+    </article>`;
+  }).join("");
 }
 
 function switchView(name) {
@@ -298,14 +352,16 @@ function switchView(name) {
     else item.removeAttribute("aria-current");
   });
   const titles = {
-    overview: ["MERCHANT OVERVIEW", "今天，讓客服再可靠一點。"],
-    knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。"],
-    tester: ["ANSWER LAB", "每次發布前，都先問一次。"],
-    staff: ["MERCHANT STAFF", "把日常預約管理留在 LINE。"],
-    settings: ["CHANNEL SETUP", "把 LINE 接到商家的服務流程。"],
+    overview: ["MERCHANT OVERVIEW", "今天，讓客服再可靠一點。", "先看營運狀態，再處理最重要的下一步。"],
+    knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。", "編輯、索引與發布都集中在同一個工作區。"],
+    tester: ["ANSWER LAB", "每次發布前，都先問一次。", "用顧客的角度確認回答內容、信心與引用來源。"],
+    staff: ["MERCHANT STAFF", "把日常預約管理留在 LINE。", "設定角色、通知與每位人員會看到的中文管理入口。"],
+    settings: ["CHANNEL SETUP", "把 LINE 接到商家的服務流程。", "依序完成憑證、Webhook 與啟用狀態檢查。"],
   };
   $("#page-eyebrow").textContent = titles[name][0];
   $("#page-title").textContent = titles[name][1];
+  $("#page-context").textContent = titles[name][2];
+  window.scrollTo({ top: 0, left: 0, behavior: "auto" });
   $("#page-title").focus({ preventScroll: true });
 }
 
@@ -416,6 +472,23 @@ $("#logout-button").addEventListener("click", async () => {
 });
 
 $$(".nav-item").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.view)));
+
+$("#app-view").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-go-view]");
+  if (!button) return;
+  switchView(button.dataset.goView);
+});
+
+$$("[data-toggle-secret]").forEach((button) => {
+  button.addEventListener("click", () => {
+    const input = document.getElementById(button.dataset.toggleSecret);
+    const visible = input.type === "text";
+    input.type = visible ? "password" : "text";
+    button.textContent = visible ? "顯示" : "隱藏";
+    button.setAttribute("aria-pressed", String(!visible));
+    input.focus({ preventScroll: true });
+  });
+});
 
 $("#staff-link-form").addEventListener("submit", async (event) => {
   event.preventDefault();

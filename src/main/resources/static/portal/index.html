@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css?v=20260731">
+  <link rel="stylesheet" href="/portal/styles.css?v=20260731-2">
   <script src="/shared/ui-utils.js?v=20260731" defer></script>
-  <script src="/portal/app.js?v=20260731" defer></script>
+  <script src="/portal/app.js?v=20260731-2" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -72,13 +72,31 @@
 
   <div id="app-view" class="app-shell hidden">
     <aside class="sidebar">
-      <a href="/portal/" class="logo"><span class="brand-mark small">店</span><span>AI 工作台</span></a>
-      <nav>
-        <button class="nav-item active" data-view="overview" type="button" aria-current="page"><span>01</span>總覽</button>
-        <button class="nav-item" data-view="knowledge" type="button"><span>02</span>知識庫</button>
-        <button class="nav-item" data-view="tester" type="button"><span>03</span>回答測試</button>
-        <button class="nav-item" data-view="staff" type="button"><span>04</span>店家人員</button>
-        <button class="nav-item" data-view="settings" type="button"><span>05</span>LINE 設定</button>
+      <a href="/portal/" class="logo">
+        <span class="brand-mark small">店</span>
+        <span class="logo-copy"><strong>LINE AI</strong><small>店家營運工作台</small></span>
+      </a>
+      <nav aria-label="主要功能">
+        <button class="nav-item active" data-view="overview" type="button" aria-current="page">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M3 11.5 12 4l9 7.5"/><path d="M5.5 10v9.5h13V10"/><path d="M9.5 19.5v-6h5v6"/></svg>
+          <span class="nav-label">總覽</span>
+        </button>
+        <button class="nav-item" data-view="knowledge" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11v16H6.5A2.5 2.5 0 0 0 4 21.5Z"/><path d="M20 5.5A2.5 2.5 0 0 0 17.5 3H13v16h4.5a2.5 2.5 0 0 1 2.5 2.5Z"/></svg>
+          <span class="nav-label">知識庫</span>
+        </button>
+        <button class="nav-item" data-view="tester" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H9l-5 4v-4a2 2 0 0 1-1-1.73V6a2 2 0 0 1 2-2Z"/><path d="M8 9h8M8 13h5"/></svg>
+          <span class="nav-label">回答測試</span>
+        </button>
+        <button class="nav-item" data-view="staff" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          <span class="nav-label">店家人員</span>
+        </button>
+        <button class="nav-item" data-view="settings" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 4h8M6 8h12M4 12h16M6 16h12M8 20h8"/><circle cx="12" cy="12" r="3"/></svg>
+          <span class="nav-label">LINE 設定</span>
+        </button>
       </nav>
       <div class="sidebar-foot">
         <div id="merchant-mini"></div>
@@ -88,11 +106,15 @@
 
     <main class="workspace">
       <header class="topbar">
-        <div>
+        <div class="page-heading">
           <p class="eyebrow" id="page-eyebrow">MERCHANT OVERVIEW</p>
           <h1 id="page-title" tabindex="-1">今天，讓客服再可靠一點。</h1>
+          <p id="page-context" class="page-context">先看營運狀態，再處理最重要的下一步。</p>
         </div>
-        <span id="system-pill" class="status-pill">讀取中</span>
+        <div class="topbar-status" aria-live="polite">
+          <span class="live-dot" aria-hidden="true"></span>
+          <span id="system-pill" class="status-pill">讀取中</span>
+        </div>
       </header>
 
       <section id="tenant-key-notice" class="credential-notice hidden" aria-live="polite">
@@ -113,20 +135,66 @@
       </section>
 
       <section id="view-overview" class="view">
-        <div class="hero-grid">
-          <article class="progress-card">
-            <div>
-              <p class="eyebrow">SETUP PROGRESS</p>
-              <h2>商家設定完成度</h2>
-              <p class="muted">完成 LINE 與知識庫設定後，就能開始服務顧客。</p>
-            </div>
-            <div class="progress-ring" id="progress-ring"><strong id="progress-number">0%</strong></div>
+        <article id="overview-banner" class="operations-banner">
+          <div class="operations-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+          </div>
+          <div class="operations-copy">
+            <p class="eyebrow">OPERATION STATUS</p>
+            <h2 id="overview-status-title">正在確認營運狀態</h2>
+            <p id="overview-status-copy">讀取 LINE、知識庫與發布資訊中。</p>
+          </div>
+          <button id="overview-primary-action" class="primary" data-go-view="settings" type="button">查看下一步</button>
+        </article>
+
+        <div class="metric-grid">
+          <article class="metric-card">
+            <div class="metric-head"><span>LINE Channel</span><span id="line-metric-dot" class="metric-dot"></span></div>
+            <strong id="line-metric-value">讀取中</strong>
+            <small id="line-metric-copy">確認連線狀態</small>
           </article>
-          <article class="metric-card"><span>知識文件</span><strong id="document-count">0</strong><small>已加入目前草稿</small></article>
-          <article class="metric-card"><span>發布狀態</span><strong id="publish-state">草稿</strong><small id="publish-time">尚未發布</small></article>
+          <article class="metric-card">
+            <div class="metric-head"><span>知識文件</span><span class="metric-symbol" aria-hidden="true">文</span></div>
+            <strong id="document-count">0</strong>
+            <small>目前版本中的可信來源</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-head"><span>店家人員</span><span class="metric-symbol" aria-hidden="true">人</span></div>
+            <strong id="staff-count">0</strong>
+            <small id="staff-count-copy">已綁定 LINE 的人員</small>
+          </article>
+          <article class="metric-card">
+            <div class="metric-head"><span>發布狀態</span><span class="metric-symbol" aria-hidden="true">AI</span></div>
+            <strong id="publish-state">草稿</strong>
+            <small id="publish-time">尚未發布</small>
+          </article>
         </div>
-        <div class="section-heading"><div><p class="eyebrow">GET STARTED</p><h2>開始營運前的四件事</h2></div></div>
-        <div id="checklist" class="checklist"></div>
+
+        <div class="overview-grid">
+          <article class="panel readiness-panel">
+            <div class="panel-head">
+              <div>
+                <p class="eyebrow">SERVICE READINESS</p>
+                <h2>客服上線準備</h2>
+                <p class="muted">每個步驟都能直接前往處理，不留下無法完成的檢查項目。</p>
+              </div>
+              <div class="progress-ring" id="progress-ring"><strong id="progress-number">0%</strong></div>
+            </div>
+            <div id="checklist" class="checklist"></div>
+          </article>
+
+          <aside class="panel quick-panel">
+            <p class="eyebrow">QUICK ACTIONS</p>
+            <h2>常用操作</h2>
+            <p class="muted">從今天最常做的工作開始。</p>
+            <div class="quick-actions">
+              <button class="quick-action" data-go-view="knowledge" type="button"><span>01</span><strong>新增客服知識</strong><small>建立或編輯可信內容</small></button>
+              <button class="quick-action" data-go-view="tester" type="button"><span>02</span><strong>測試 AI 回答</strong><small>發布前確認語氣與引用</small></button>
+              <button class="quick-action" data-go-view="staff" type="button"><span>03</span><strong>管理店家人員</strong><small>設定角色與 LINE 選單</small></button>
+              <button class="quick-action" data-go-view="settings" type="button"><span>04</span><strong>檢查 LINE 設定</strong><small>確認憑證與 Webhook</small></button>
+            </div>
+          </aside>
+        </div>
       </section>
 
       <section id="view-knowledge" class="view hidden">
@@ -181,6 +249,11 @@
             <p class="muted">不需要第二個 LINE 官方帳號。完成單次綁定後，系統會為該人員套用角色專屬的個人圖文選單；一般顧客的預設選單不會改變。</p>
           </div>
         </div>
+        <div class="role-guide" aria-label="LINE 個人圖文選單權限">
+          <article><span class="role-icon owner">擁</span><div><strong>擁有者</strong><p>顯示「管理後台」，可進入完整工作台。</p></div></article>
+          <article><span class="role-icon manager">管</span><div><strong>管理員</strong><p>顯示「預約管理」，可處理預約與封鎖時段。</p></div></article>
+          <article><span class="role-icon viewer">看</span><div><strong>檢視者</strong><p>顯示「預約管理」，但只能查看行程。</p></div></article>
+        </div>
         <div class="content-grid">
           <form id="staff-link-form" class="panel stack">
             <div><p class="eyebrow">NEW STAFF LINK</p><h3>產生單次綁定碼</h3></div>
@@ -212,18 +285,36 @@
 
       <section id="view-settings" class="view hidden">
         <div class="section-heading"><div><p class="eyebrow">CHANNEL SETUP</p><h2>連接 LINE 官方帳號</h2><p class="muted">敏感憑證會由後端加密保存，頁面不會再次顯示。</p></div></div>
+        <ol class="setup-steps" aria-label="LINE 設定步驟">
+          <li class="active"><span>1</span><div><strong>安全填入憑證</strong><small>Channel Secret 與 Access Token</small></div></li>
+          <li><span>2</span><div><strong>設定 Webhook</strong><small>複製網址到 LINE Developers</small></div></li>
+          <li><span>3</span><div><strong>確認服務狀態</strong><small>檢查是否已連線並啟用</small></div></li>
+        </ol>
         <div class="content-grid">
           <form id="line-form" class="panel stack">
-            <label>Channel Secret<input name="channel_secret" type="password" minlength="8" required></label>
-            <label>Channel Access Token<textarea name="channel_access_token" rows="5" minlength="8" required></textarea></label>
+            <div>
+              <p class="eyebrow">CHANNEL CREDENTIALS</p>
+              <h3>LINE Channel 憑證</h3>
+              <p class="muted">儲存後不會再次顯示原始內容。</p>
+            </div>
+            <label>Channel Secret
+              <span class="secret-field"><input id="channel-secret" name="channel_secret" type="password" minlength="8" autocomplete="off" required><button class="field-action" data-toggle-secret="channel-secret" type="button" aria-pressed="false">顯示</button></span>
+            </label>
+            <label>Channel Access Token
+              <span class="secret-field"><input id="channel-access-token" name="channel_access_token" type="password" minlength="8" autocomplete="off" required><button class="field-action" data-toggle-secret="channel-access-token" type="button" aria-pressed="false">顯示</button></span>
+            </label>
             <label class="switch-row"><input name="enabled" type="checkbox" checked><span>啟用 LINE 回覆</span></label>
             <button class="primary" type="submit">儲存 LINE 設定</button>
           </form>
-          <article class="panel">
+          <article id="channel-health-card" class="panel channel-health">
             <p class="eyebrow">WEBHOOK URL</p>
             <h3>貼到 LINE Developers Console</h3>
+            <p class="muted">LINE 會把顧客訊息傳送到這個租戶專屬網址。</p>
             <div class="copy-field"><code id="webhook-url">尚未建立</code><button id="copy-webhook" class="secondary">複製</button></div>
-            <div id="line-status" class="notice">尚未讀取設定</div>
+            <div class="health-status">
+              <span class="health-indicator" aria-hidden="true"></span>
+              <div><strong id="channel-health-title">尚未讀取設定</strong><p id="line-status">正在確認 LINE Channel 狀態。</p></div>
+            </div>
           </article>
         </div>
       </section>
