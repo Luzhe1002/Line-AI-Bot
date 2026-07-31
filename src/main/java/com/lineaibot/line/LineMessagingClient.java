@@ -1,17 +1,24 @@
 package com.lineaibot.line;
 
 import com.lineaibot.config.AppProperties;
+import java.io.IOException;
+import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -22,6 +29,7 @@ public class LineMessagingClient {
     private final LineRepository repository;
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
     private final RestClient restClient;
 
     public LineMessagingClient(
@@ -32,8 +40,9 @@ public class LineMessagingClient {
         this.repository = repository;
         this.properties = properties;
         this.objectMapper = objectMapper;
-        var httpClient = HttpClient.newBuilder()
+        this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(20))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
         var requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(20));
@@ -146,17 +155,36 @@ public class LineMessagingClient {
 
     public void uploadRichMenuImage(
             String channelAccessToken, String richMenuId, byte[] png) {
-        restClient.post()
-                .uri(dataApiBaseUrl()
+        var request = HttpRequest.newBuilder(URI.create(dataApiBaseUrl()
                         + "/v2/bot/richmenu/"
                         + richMenuId
-                        + "/content")
-                .contentType(MediaType.IMAGE_PNG)
-                .contentLength(png.length)
+                        + "/content"))
+                .timeout(Duration.ofSeconds(20))
                 .header("Authorization", "Bearer " + channelAccessToken)
-                .body(png)
-                .retrieve()
-                .toBodilessEntity();
+                .header("Content-Type", MediaType.IMAGE_PNG_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(png))
+                .build();
+        try {
+            var response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new RestClientResponseException(
+                        "LINE rich menu image upload returned HTTP "
+                                + response.statusCode(),
+                        response.statusCode(),
+                        "",
+                        HttpHeaders.EMPTY,
+                        response.body(),
+                        StandardCharsets.UTF_8);
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new RestClientException(
+                    "LINE rich menu image upload was interrupted", exception);
+        } catch (IOException exception) {
+            throw new RestClientException(
+                    "LINE rich menu image upload failed", exception);
+        }
     }
 
     public void linkRichMenu(
