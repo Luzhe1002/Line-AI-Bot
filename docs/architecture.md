@@ -141,9 +141,10 @@ Outbox `dedupe_key` 避免已成功的接收者在重試時再次收到通知。
 角色異動。LINE 暫時失敗時採最長五分鐘的漸進退避，綁定本身仍維持成功。
 
 `merchant_rich_menus` 保存每個租戶與角色對應的 LINE rich menu ID。建立流程
-先用穩定名稱查找既有資源，避免程序在 LINE 建立成功但資料庫寫入前中斷時反覆
-建立；圖片上傳成功後才標記 READY。若連結時收到找不到選單，會清除舊 ID 並於
-下一次重試重建。
+以包含介面 revision 的穩定名稱查找既有資源，避免程序在 LINE 建立成功但資料庫
+寫入前中斷時反覆建立；圖片上傳成功後才標記 READY。LINE 不允許替換既有 Rich
+Menu 圖片，因此介面改版會增加名稱 revision、清除舊 ID 並排程所有已綁定人員
+切換到新選單。若連結時收到找不到選單，會清除舊 ID 並於下一次重試重建。
 
 OWNER 的 `merchant_portal` postback 會建立 purpose 為 `PORTAL_LOGIN` 的十分鐘
 單次 Token，並以 `/portal/#token=...` 回覆。Portal 前端先清除 URL fragment，

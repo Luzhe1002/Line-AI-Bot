@@ -36,4 +36,10 @@ class MerchantRichMenuImageFactoryTest {
         assertThat(MerchantRichMenuImageFactory.labelsForRole("VIEWER"))
                 .startsWith("預約管理", "查看月曆");
     }
+
+    @Test
+    void usesAVersionedChineseMenuNameInsteadOfReusingTheEnglishMenu() {
+        assertThat(MerchantRichMenuService.menuName("tenant-1", "OWNER"))
+                .isEqualTo("line-ai-bot-staff-tenant-1-owner-zh-tw-v1");
+    }
 }

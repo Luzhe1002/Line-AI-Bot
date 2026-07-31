@@ -215,9 +215,19 @@ function renderOverview() {
 function renderDocuments() {
   const list = $("#document-list");
   const dataset = selectedDataset();
-  const editable = selectedDataset()?.status === "DRAFT";
-  $("#publish-button").disabled = !editable;
-  $("#publish-button").title = editable ? "" : "修改內容後才需要發布";
+  const editable = dataset?.status === "DRAFT";
+  const activeDocuments = state.documents.filter((item) => item.active !== false);
+  const unreadyDocuments = activeDocuments.filter((item) => item.index_status !== "READY");
+  const canPublish = editable && activeDocuments.length > 0 && unreadyDocuments.length === 0;
+  const publishButton = $("#publish-button");
+  publishButton.disabled = !canPublish;
+  publishButton.title = canPublish
+    ? ""
+    : (!editable
+      ? "修改內容或重新索引後，系統會建立可發布的新版草稿"
+      : (activeDocuments.length === 0
+        ? "至少新增一筆知識才能發布"
+        : "請等待所有知識完成索引後再發布"));
   $("#document-total").textContent = `${state.documents.length} 筆`;
   const version = $("#knowledge-version");
   if (dataset) {
@@ -785,14 +795,14 @@ $("#publish-button").addEventListener("click", async () => {
 });
 
 $("#reindex-button").addEventListener("click", async () => {
-  const datasetId = state.selectedDatasetId;
-  if (!datasetId) return toast("沒有可索引的資料集", true);
+  if (!state.selectedDatasetId) return toast("沒有可索引的資料集", true);
   const button = $("#reindex-button");
   button.disabled = true;
   button.textContent = "重建索引中…";
   try {
+    const datasetId = await ensureEditableDataset();
     const result = await api(`/datasets/reindex?datasetId=${encodeURIComponent(datasetId)}`, { method: "POST" });
-    await loadDocuments(datasetId);
+    await refreshOverview();
     toast(`重新索引完成：${result.indexed} 成功，${result.failed} 失敗`);
   } catch (error) {
     toast(error.message, true);

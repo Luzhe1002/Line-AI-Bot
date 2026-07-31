@@ -32,8 +32,10 @@ LINE 電腦版不顯示 Rich Menu。管理者可改用文字指令 `管理預約
 6. 呼叫 LINE per-user rich menu API，把角色選單綁定到加密保存的 LINE user ID。
 7. 同步成功後標記 SYNCED。
 
-`V4__refresh_chinese_staff_rich_menus.sql` 會在部署時把既有選單排回同步佇列，
-讓已綁定人員也換成中文圖文，不需要重新綁定 LINE。
+LINE 不允許替換已設定在 Rich Menu 上的圖片，因此不能在既有 ID 上重傳中文圖。
+`V5__replace_staff_rich_menus_with_chinese_version.sql` 會清除舊 ID、增加同步 revision，
+再由 Worker 以版本化名稱建立中文選單。已綁定人員會自動切換，不需要重新綁定
+LINE；舊選單不再綁定任何人員。
 
 角色或狀態更新會增加 revision 並重新標記 READY。進行中的舊工作只能更新相同
 revision，因此不會覆蓋較新的期望狀態。

@@ -90,6 +90,21 @@ test("knowledge items can be added, edited, and deleted without choosing a datas
   await expect(item).toHaveCount(0);
 });
 
+test("reindexing published knowledge creates a publishable draft", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "知識庫", exact: true }).click();
+
+  await expect(page.locator("#knowledge-version")).toContainText("目前正式版");
+  await expect(page.getByRole("button", { name: "發布更新" })).toBeDisabled();
+  await page.getByText("索引異常處理", { exact: true }).click();
+  await page.getByRole("button", { name: "重新建立全部索引" }).click();
+
+  await expect(page.locator("#knowledge-version")).toContainText("待發布草稿");
+  await expect(page.getByRole("button", { name: "發布更新" })).toBeEnabled();
+  await page.getByRole("button", { name: "發布更新" }).click();
+  await expect(page.locator("#knowledge-version")).toContainText("目前正式版");
+});
+
 test("staff list removes redundant active labels and can remove a binding", async ({ page }) => {
   await page.goto("/portal/#token=e2e-token");
   await page.getByRole("button", { name: "店家人員", exact: true }).click();
@@ -166,6 +181,12 @@ test("merchant agenda shows loading/error feedback and localized role", async ({
   await page.goto("/merchant-booking/demo/#token=e2e-token");
   await expect(page.locator("#tenant-name")).toHaveText("測試店家");
   await expect(page.locator("#role-badge")).toHaveText("擁有者");
+  await expect(page.locator(".eyebrow")).toHaveText([
+    "店家預約管理",
+    "當日行程",
+    "暫停開放",
+    "封鎖紀錄",
+  ]);
 
   const refresh = page.locator("#refresh-button");
   await refresh.click();

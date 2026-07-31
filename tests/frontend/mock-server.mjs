@@ -37,9 +37,11 @@ async function readJson(request) {
 let portalDocuments;
 let portalStaff;
 let portalHasDraft;
+let portalActiveVersion;
 
 function resetPortalFixture() {
   portalHasDraft = false;
+  portalActiveVersion = 3;
   portalDocuments = [{
     id: "document-1",
     dataset_id: "dataset-active",
@@ -122,14 +124,14 @@ function portalApi(url, request, response) {
         }, {
           id: "dataset-active",
           name: "正式客服知識",
-          version: 3,
+          version: portalActiveVersion,
           status: "ACTIVE",
           published_at: "2026-07-31T08:00:00Z",
         }]
         : [{
           id: "dataset-active",
           name: "正式客服知識",
-          version: 3,
+          version: portalActiveVersion,
           status: "ACTIVE",
           published_at: "2026-07-31T08:00:00Z",
         }],
@@ -153,7 +155,17 @@ function portalApi(url, request, response) {
     return true;
   }
   if (endpoint === "/datasets/publish" && request.method === "POST") {
+    if (!portalHasDraft || url.searchParams.get("datasetId") !== "dataset-draft") {
+      sendJson(response, 409, { detail: "只能發布目前的草稿" });
+      return true;
+    }
     portalHasDraft = false;
+    portalActiveVersion = 4;
+    portalDocuments = portalDocuments.map((document, index) => ({
+      ...document,
+      id: `active-copy-${index + 1}`,
+      dataset_id: "dataset-active",
+    }));
     sendJson(response, 200, {
       id: "dataset-active",
       name: "正式客服知識",
@@ -164,6 +176,10 @@ function portalApi(url, request, response) {
     return true;
   }
   if (endpoint === "/datasets/reindex" && request.method === "POST") {
+    if (!portalHasDraft || url.searchParams.get("datasetId") !== "dataset-draft") {
+      sendJson(response, 409, { detail: "請先建立新版草稿再重新索引" });
+      return true;
+    }
     sendJson(response, 200, { indexed: portalDocuments.length, failed: 0, errors: [] });
     return true;
   }
