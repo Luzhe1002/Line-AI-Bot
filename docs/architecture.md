@@ -31,6 +31,7 @@ flowchart LR
     WORKER --> STAFF_ROUTE{"已綁定店家人員？"}
     STAFF_ROUTE -->|"一般顧客"| ORCH["Conversation Service"]
     STAFF_ROUTE -->|"店家人員"| STAFF_COMMAND["MerchantLineService"]
+    STAFF_COMMAND --> RICH_MENU["角色專屬個人圖文選單"]
     ORCH --> BOOKING["BookingManager"]
     ORCH --> KNOWLEDGE["Knowledge Service"]
     ORCH --> HANDOFF[("handoff_tickets")]
@@ -120,6 +121,38 @@ Outbox `dedupe_key` 避免已成功的接收者在重試時再次收到通知。
 - 手機頁提供當日清單、取消、封鎖及解除；文件與 LINE Channel 設定仍留在
   `/portal/`。
 
+### 個人圖文選單與完整工作台登入
+
+顧客與店家人員仍共用同一個商家官方帳號，但顯示不同範圍的圖文選單：
+
+- 商家既有預設圖文選單仍提供給一般顧客，系統不會加入任何管理按鈕。
+- `merchant_staff` 完成綁定後，系統依 OWNER／MANAGER／VIEWER 建立並綁定
+  Messaging API 的 per-user rich menu。個人選單優先於預設選單。
+- 人員角色變更會更新期望角色；停權會把期望狀態改成解除綁定。解除完成後由
+  LINE 自動顯示該官方帳號的顧客預設選單。
+- 圖文選單只提供入口。所有 postback、Token 交換與後續 API 仍重新查詢
+  `tenant_id + merchant_staff`、ACTIVE 狀態及角色。
+
+外部 Rich Menu API 不放在人員綁定交易中。`merchant_rich_menu_sync` 保存每位
+人員的期望狀態、revision、重試次數與下次執行時間；單執行緒排程 Worker 以
+條件式 Claim 處理工作。revision 可防止進行中的舊同步結果覆蓋剛發生的停權或
+角色異動。LINE 暫時失敗時採最長五分鐘的漸進退避，綁定本身仍維持成功。
+
+`merchant_rich_menus` 保存每個租戶與角色對應的 LINE rich menu ID。建立流程
+先用穩定名稱查找既有資源，避免程序在 LINE 建立成功但資料庫寫入前中斷時反覆
+建立；圖片上傳成功後才標記 READY。若連結時收到找不到選單，會清除舊 ID 並於
+下一次重試重建。
+
+OWNER 的 `merchant_portal` postback 會建立 purpose 為 `PORTAL_LOGIN` 的十分鐘
+單次 Token，並以 `/portal/#token=...` 回覆。Portal 前端先清除 URL fragment，
+再以 Bearer Token 呼叫 `/portal/api/line-session`。後端消耗 Token、重新確認
+ACTIVE OWNER，旋轉 Session ID 並建立 HttpOnly Session 與 CSRF Token。該
+Session 保存 `tenant_id + staff_id`，每次 API 呼叫都重新確認 OWNER 權限；
+停權或降級後不能沿用既有 Session。
+
+預約頁 Token 使用 `BOOKING_MANAGE` purpose，完整工作台 Token 使用
+`PORTAL_LOGIN` purpose，兩者不能跨端點交換。
+
 ## 知識庫與 AI
 
 1. 每個商家只能有一個 `ACTIVE` 資料集。
@@ -159,6 +192,9 @@ RabbitMQ、SQS 或 Kafka 在 API／Worker 需要獨立擴縮、持續高流量�
 - 店家管理指令先驗證 `tenant_id + merchant_staff`，所有 Postback 與手機
   Session 都重新檢查人員狀態及角色。
 - 店家綁定碼與手機管理 Token 都短效、單次使用，資料庫只保存 HMAC。
+- Rich Menu 不是授權依據；即使管理網址外流，仍須通過 purpose 限定的單次
+  Token、ACTIVE 人員狀態與伺服器端角色檢查。
+- 顧客預設選單與店家個人選單分離；只有已綁定人員會建立 per-user 同步工作。
 - 預約與封鎖共用資料庫唯一時段占用，不依賴前端「先查再寫」。
 - Production 模式拒絕預設管理金鑰與加密金鑰。
 - 商家工作台以 Tenant API Key 換取 HttpOnly Session，API Key 不保存於瀏覽器。

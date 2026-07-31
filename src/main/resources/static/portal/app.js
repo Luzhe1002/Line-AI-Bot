@@ -73,6 +73,28 @@ async function restoreSession() {
   }
 }
 
+async function exchangeLineOwnerToken() {
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const token = fragment.get("token");
+  if (!token) return false;
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  try {
+    const session = await api("/line-session", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    state.csrfToken = session.csrf_token;
+    state.tenant = session.tenant;
+    await enterApp();
+    toast("已透過店家擁有者 LINE 安全登入");
+    return true;
+  } catch (error) {
+    showAuth();
+    toast(error.message, true);
+    return false;
+  }
+}
+
 function showAuth() {
   $("#auth-view").classList.remove("hidden");
   $("#app-view").classList.add("hidden");
@@ -588,4 +610,8 @@ $("#copy-webhook").addEventListener("click", async () => {
   } catch (_) { toast("無法存取剪貼簿，請手動複製", true); }
 });
 
-restoreSession();
+async function initialize() {
+  if (!(await exchangeLineOwnerToken())) await restoreSession();
+}
+
+initialize();

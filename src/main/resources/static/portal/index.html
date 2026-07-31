@@ -34,7 +34,7 @@
         <div>
           <p class="eyebrow">WELCOME BACK</p>
           <h2>回到工作台</h2>
-          <p class="muted">API Key 只用來換取安全登入 Session，不會保存於瀏覽器。</p>
+          <p class="muted">可使用 API Key，或由已綁定 OWNER 的個人圖文選單安全登入。憑證不會保存於瀏覽器。</p>
         </div>
         <label>租戶 ID<input name="tenant_id" autocomplete="username" required></label>
         <label>商家管理 API Key<input name="api_key" type="password" autocomplete="current-password" required></label>
@@ -175,7 +175,7 @@
           <div>
             <p class="eyebrow">MERCHANT STAFF</p>
             <h2>把店家人員的 LINE 綁定成管理入口</h2>
-            <p class="muted">不需要第二個 LINE 官方帳號。店家人員以自己的私人 LINE 加入目前官方帳號，再傳送單次綁定指令。</p>
+            <p class="muted">不需要第二個 LINE 官方帳號。完成單次綁定後，系統會為該人員套用角色專屬的個人圖文選單；一般顧客的預設選單不會改變。</p>
           </div>
         </div>
         <div class="content-grid">
@@ -190,7 +190,7 @@
               </select>
             </label>
             <button class="primary" type="submit">產生綁定碼</button>
-            <p class="fine-print">綁定碼十分鐘內有效且只能使用一次。請勿把擁有者綁定碼交給不受信任的人。</p>
+            <p class="fine-print">綁定碼十分鐘內有效且只能使用一次。請勿把擁有者綁定碼交給不受信任的人。LINE API 暫時失敗不會取消綁定，個人選單會在背景重試。</p>
           </form>
           <div>
             <article id="staff-link-result" class="panel hidden">

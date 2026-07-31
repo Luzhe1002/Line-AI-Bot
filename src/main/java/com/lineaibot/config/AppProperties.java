@@ -29,6 +29,7 @@ public class AppProperties {
     private int lineWorkerConcurrency = 8;
 
     private String lineApiBaseUrl = "https://api.line.me";
+    private String lineApiDataBaseUrl = "https://api-data.line.me";
     private String publicBaseUrl = "http://localhost:8000";
     private final Ai ai = new Ai();
 
@@ -115,6 +116,14 @@ public class AppProperties {
 
     public void setLineApiBaseUrl(String lineApiBaseUrl) {
         this.lineApiBaseUrl = lineApiBaseUrl;
+    }
+
+    public String getLineApiDataBaseUrl() {
+        return lineApiDataBaseUrl;
+    }
+
+    public void setLineApiDataBaseUrl(String lineApiDataBaseUrl) {
+        this.lineApiDataBaseUrl = lineApiDataBaseUrl;
     }
 
     public String getPublicBaseUrl() {
