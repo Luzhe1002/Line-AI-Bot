@@ -82,7 +82,7 @@ class MerchantBookingManagementIntegrationTest {
         assertThat(payload)
                 .contains("開啟預約頁")
                 .contains("/booking/" + tenant.slug())
-                .contains("填寫預約姓名")
+                .contains("請點選下方「開啟預約頁」按鈕，選擇服務、時段並填寫預約姓名。")
                 .doesNotContain("action=book")
                 .doesNotContain("我要預約 ");
     }
@@ -131,6 +131,10 @@ class MerchantBookingManagementIntegrationTest {
         assertThat(latestOutbox(tenant.id(), "U-owner", "PUSH"))
                 .contains("收到新預約")
                 .contains("陳小姐");
+        assertThat(latestOutbox(tenant.id(), "U-booking-customer", "PUSH"))
+                .contains("預約成功")
+                .contains("陳小姐")
+                .contains(reservation.path("id").asText().substring(0, 8).toUpperCase());
 
         processLineText(tenant, "U-owner", "本週預約");
         assertThat(latestOutbox(tenant.id(), "U-owner", "REPLY"))

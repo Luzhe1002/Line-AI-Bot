@@ -109,7 +109,7 @@ public class ConversationService {
         message.put("type", "text");
         message.put(
                 "text",
-                "請開啟「" + service.name() + "」預約頁，選擇時段並填寫預約姓名。");
+                "請點選下方「開啟預約頁」按鈕，選擇服務、時段並填寫預約姓名。");
         message.put("quickReply", Map.of("items", List.of(openBookingPage)));
         return List.of(message);
     }
