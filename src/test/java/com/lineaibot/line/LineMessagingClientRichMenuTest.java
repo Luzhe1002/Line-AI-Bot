@@ -93,11 +93,38 @@ class LineMessagingClientRichMenuTest {
                 .hasMessageContaining("Invalid rich menu image");
     }
 
+    @Test
+    void treatsAnAlreadyUploadedRichMenuImageAsIdempotentSuccess() {
+        AppProperties properties = new AppProperties();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        properties.setLineApiBaseUrl(baseUrl);
+        properties.setLineApiDataBaseUrl(baseUrl);
+        LineMessagingClient client = new LineMessagingClient(
+                mock(LineRepository.class),
+                properties,
+                new ObjectMapper(),
+                RestClient.builder());
+
+        client.uploadRichMenuImage(
+                "channel-token", "already-uploaded", new byte[] {1, 2, 3});
+    }
+
     private void handle(HttpExchange exchange) throws IOException {
         requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
         if (exchange.getRequestURI().getPath().contains("/invalid-image/content")) {
             exchange.getRequestBody().readAllBytes();
             byte[] response = "{\"message\":\"Invalid rich menu image\"}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(400, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+            return;
+        }
+        if (exchange.getRequestURI().getPath().contains("/already-uploaded/content")) {
+            exchange.getRequestBody().readAllBytes();
+            byte[] response = ("{\"message\":\"An image has already been uploaded "
+                            + "to the richmenu\"}")
                     .getBytes(StandardCharsets.UTF_8);
             exchange.getResponseHeaders().add("Content-Type", "application/json");
             exchange.sendResponseHeaders(400, response.length);

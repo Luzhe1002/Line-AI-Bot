@@ -61,9 +61,11 @@ test("portal dashboard presents operational status and role-specific LINE entry"
   await expect(page.locator("#document-count")).toHaveText("1");
   await expect(page.locator("#staff-count")).toHaveText("2");
 
-  await page.getByRole("button", { name: "店家人員" }).click();
-  await expect(page.getByText("顯示「管理後台」，可進入完整工作台。").first()).toBeVisible();
-  await expect(page.locator(".staff-menu-note").first()).toContainText("管理後台");
+  await page.getByRole("button", { name: "店家人員", exact: true }).click();
+  const owner = page.locator(".staff-item").filter({ hasText: "王店長" });
+  await expect(owner.getByText("顯示「管理後台」，可進入完整工作台。"))
+    .toBeVisible();
+  await expect(owner.locator(".staff-menu-note")).toContainText("管理後台");
 });
 
 test("knowledge items can be added, edited, and deleted without choosing a dataset", async ({ page }) => {
@@ -117,6 +119,20 @@ test("staff list removes redundant active labels and can remove a binding", asyn
   await manager.getByRole("button", { name: "移除綁定" }).click();
   await expect(manager).toHaveCount(0);
   await expect(page.getByText("王店長", { exact: true })).toBeVisible();
+});
+
+test("expired portal sessions return to login with localized guidance", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "店家人員", exact: true }).click();
+
+  const owner = page.locator(".staff-item").filter({ hasText: "王店長" });
+  await owner.locator("summary").click();
+  await page.evaluate(() => fetch("/portal/api/test/expire-session", { method: "POST" }));
+  await owner.getByRole("button", { name: "儲存設定" }).click();
+
+  await expect(page.locator("#auth-view")).toBeVisible();
+  await expect(page.getByRole("alert"))
+    .toContainText("登入狀態已過期，請重新登入後再操作");
 });
 
 test("connected LINE channel marks every setup step complete", async ({ page }) => {

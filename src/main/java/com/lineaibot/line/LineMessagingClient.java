@@ -27,6 +27,8 @@ import tools.jackson.databind.ObjectMapper;
 public class LineMessagingClient {
 
     private static final int MAX_ERROR_BODY_LENGTH = 500;
+    private static final String IMAGE_ALREADY_UPLOADED =
+            "An image has already been uploaded to the richmenu";
 
     private final LineRepository repository;
     private final AppProperties properties;
@@ -171,6 +173,10 @@ public class LineMessagingClient {
                     httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 String responseBody = sanitizeErrorBody(response.body());
+                if (response.statusCode() == 400
+                        && responseBody.contains(IMAGE_ALREADY_UPLOADED)) {
+                    return;
+                }
                 throw new RestClientResponseException(
                         "LINE rich menu image upload returned HTTP "
                                 + response.statusCode()

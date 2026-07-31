@@ -38,8 +38,10 @@ let portalDocuments;
 let portalStaff;
 let portalHasDraft;
 let portalActiveVersion;
+let portalSessionExpired;
 
 function resetPortalFixture() {
+  portalSessionExpired = false;
   portalHasDraft = false;
   portalActiveVersion = 3;
   portalDocuments = [{
@@ -91,8 +93,13 @@ function portalApi(url, request, response) {
     }, { "Set-Cookie": "portal-e2e=1; Path=/; HttpOnly; SameSite=Lax" });
     return true;
   }
+  if (endpoint === "/test/expire-session" && request.method === "POST") {
+    portalSessionExpired = true;
+    sendEmpty(response);
+    return true;
+  }
   if (endpoint === "/session" && request.method === "GET") {
-    sendJson(response, 200, authenticated
+    sendJson(response, 200, authenticated && !portalSessionExpired
       ? { authenticated: true, csrf_token: "portal-csrf", tenant }
       : { authenticated: false });
     return true;
@@ -101,7 +108,11 @@ function portalApi(url, request, response) {
     sendEmpty(response);
     return true;
   }
-  if (!authenticated) {
+  if (portalSessionExpired && request.method !== "GET") {
+    sendJson(response, 403, { detail: "Invalid CSRF token" });
+    return true;
+  }
+  if (!authenticated || portalSessionExpired) {
     sendJson(response, 401, { detail: "請先登入商家工作台" });
     return true;
   }

@@ -12,7 +12,27 @@ const state = {
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
 
-async function api(path, options = {}) {
+async function refreshSessionForRetry() {
+  try {
+    const response = await fetch("/portal/api/session", { credentials: "same-origin" });
+    if (!response.ok) return false;
+    const session = await response.json();
+    if (!session.authenticated || !session.csrf_token) return false;
+    state.csrfToken = session.csrf_token;
+    state.tenant = session.tenant;
+    return true;
+  } catch (_) {
+    return false;
+  }
+}
+
+function expirePortalSession() {
+  state.csrfToken = null;
+  state.tenant = null;
+  showAuth();
+}
+
+async function api(path, options = {}, retryCsrf = true) {
   const headers = { ...(options.headers || {}) };
   if (options.body && !(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
   if (state.csrfToken && options.method && options.method !== "GET") {
@@ -29,6 +49,15 @@ async function api(path, options = {}) {
       const error = await response.json();
       message = error.detail || message;
     } catch (_) {}
+    if (response.status === 403
+        && message === "Invalid CSRF token"
+        && retryCsrf
+        && options.method
+        && options.method !== "GET") {
+      if (await refreshSessionForRetry()) return api(path, options, false);
+      expirePortalSession();
+      throw new Error("登入狀態已過期，請重新登入後再操作");
+    }
     throw new Error(message);
   }
   if (response.status === 204 || response.headers.get("content-length") === "0") return null;
