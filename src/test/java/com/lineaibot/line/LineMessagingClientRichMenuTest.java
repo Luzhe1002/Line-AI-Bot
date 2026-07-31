@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -22,6 +23,7 @@ class LineMessagingClientRichMenuTest {
 
     private HttpServer server;
     private final List<String> requests = new CopyOnWriteArrayList<>();
+    private final AtomicReference<String> uploadContentLength = new AtomicReference<>();
 
     @BeforeEach
     void startServer() throws IOException {
@@ -69,10 +71,14 @@ class LineMessagingClientRichMenuTest {
                         "POST /v2/bot/richmenu/richmenu-test/content",
                         "POST /v2/bot/user/U-owner/richmenu/richmenu-test",
                         "DELETE /v2/bot/user/U-owner/richmenu");
+        assertThat(uploadContentLength.get()).isEqualTo("3");
     }
 
     private void handle(HttpExchange exchange) throws IOException {
         requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+        if (exchange.getRequestURI().getPath().endsWith("/content")) {
+            uploadContentLength.set(exchange.getRequestHeaders().getFirst("Content-Length"));
+        }
         exchange.getRequestBody().readAllBytes();
         byte[] response = exchange.getRequestURI().getPath().equals("/v2/bot/richmenu/list")
                 ? "{\"richmenus\":[]}".getBytes(StandardCharsets.UTF_8)

@@ -152,6 +152,7 @@ public class LineMessagingClient {
                         + richMenuId
                         + "/content")
                 .contentType(MediaType.IMAGE_PNG)
+                .contentLength(png.length)
                 .header("Authorization", "Bearer " + channelAccessToken)
                 .body(png)
                 .retrieve()
