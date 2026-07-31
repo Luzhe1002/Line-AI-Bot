@@ -1,6 +1,7 @@
 package com.lineaibot.line;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 
 import com.lineaibot.config.AppProperties;
@@ -74,8 +75,36 @@ class LineMessagingClientRichMenuTest {
         assertThat(uploadContentLength.get()).isEqualTo("3");
     }
 
+    @Test
+    void exposesTheSafeLineErrorBodyWhenRichMenuImageUploadFails() {
+        AppProperties properties = new AppProperties();
+        String baseUrl = "http://127.0.0.1:" + server.getAddress().getPort();
+        properties.setLineApiBaseUrl(baseUrl);
+        properties.setLineApiDataBaseUrl(baseUrl);
+        LineMessagingClient client = new LineMessagingClient(
+                mock(LineRepository.class),
+                properties,
+                new ObjectMapper(),
+                RestClient.builder());
+
+        assertThatThrownBy(() -> client.uploadRichMenuImage(
+                        "channel-token", "invalid-image", new byte[] {1, 2, 3}))
+                .hasMessageContaining("LINE rich menu image upload returned HTTP 400")
+                .hasMessageContaining("Invalid rich menu image");
+    }
+
     private void handle(HttpExchange exchange) throws IOException {
         requests.add(exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath());
+        if (exchange.getRequestURI().getPath().contains("/invalid-image/content")) {
+            exchange.getRequestBody().readAllBytes();
+            byte[] response = "{\"message\":\"Invalid rich menu image\"}"
+                    .getBytes(StandardCharsets.UTF_8);
+            exchange.getResponseHeaders().add("Content-Type", "application/json");
+            exchange.sendResponseHeaders(400, response.length);
+            exchange.getResponseBody().write(response);
+            exchange.close();
+            return;
+        }
         if (exchange.getRequestURI().getPath().endsWith("/content")) {
             uploadContentLength.set(exchange.getRequestHeaders().getFirst("Content-Length"));
         }
