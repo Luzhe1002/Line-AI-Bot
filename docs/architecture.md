@@ -130,6 +130,8 @@ Outbox `dedupe_key` 避免已成功的接收者在重試時再次收到通知。
   Messaging API 的 per-user rich menu。個人選單優先於預設選單。
 - 人員角色變更會更新期望角色；停權會把期望狀態改成解除綁定。解除完成後由
   LINE 自動顯示該官方帳號的顧客預設選單。
+- 工作台的「移除綁定」會把人員標記為停用並排程解除個人選單；為保留預約
+  稽核關聯不會硬刪資料。停用後清單不再顯示，同一個 LINE 日後可重新綁定。
 - 圖文選單只提供入口。所有 postback、Token 交換與後續 API 仍重新查詢
   `tenant_id + merchant_staff`、ACTIVE 狀態及角色。
 

@@ -157,6 +157,18 @@ public class MerchantRepository {
                 .optional();
     }
 
+    public Optional<StaffView> findStaffByLineKey(String tenantId, String lineUserKey) {
+        return jdbc.sql("""
+                        select * from merchant_staff
+                        where tenant_id = :tenantId
+                          and line_user_key = :lineUserKey
+                        """)
+                .param("tenantId", tenantId)
+                .param("lineUserKey", lineUserKey)
+                .query(this::mapStaff)
+                .optional();
+    }
+
     public Optional<StaffView> findStaff(String tenantId, String staffId) {
         return jdbc.sql("""
                         select * from merchant_staff
@@ -172,6 +184,7 @@ public class MerchantRepository {
         return jdbc.sql("""
                         select * from merchant_staff
                         where tenant_id = :tenantId
+                          and status = 'ACTIVE'
                         order by created_at
                         """)
                 .param("tenantId", tenantId)
@@ -240,6 +253,55 @@ public class MerchantRepository {
                 .param("notifyCancellation", notifyCancellation)
                 .param("dailySummaryEnabled", dailySummaryEnabled)
                 .param("dailySummaryTime", dailySummaryTime)
+                .param("updatedAt", utc(updatedAt))
+                .param("tenantId", tenantId)
+                .param("staffId", staffId)
+                .update();
+        return findStaff(tenantId, staffId).orElseThrow();
+    }
+
+    public StaffView reactivateStaff(
+            String tenantId,
+            String staffId,
+            String lineUserIdEncrypted,
+            String displayName,
+            String role,
+            Instant updatedAt) {
+        jdbc.sql("""
+                        update merchant_staff
+                        set line_user_id_encrypted = :lineUserIdEncrypted,
+                            display_name = :displayName,
+                            role = :role,
+                            status = 'ACTIVE',
+                            notify_new_booking = true,
+                            notify_cancellation = true,
+                            daily_summary_enabled = false,
+                            daily_summary_time = :dailySummaryTime,
+                            updated_at = :updatedAt
+                        where tenant_id = :tenantId
+                          and id = :staffId
+                          and status <> 'ACTIVE'
+                        """)
+                .param("lineUserIdEncrypted", lineUserIdEncrypted)
+                .param("displayName", displayName)
+                .param("role", role)
+                .param("dailySummaryTime", LocalTime.of(8, 0))
+                .param("updatedAt", utc(updatedAt))
+                .param("tenantId", tenantId)
+                .param("staffId", staffId)
+                .update();
+        return findStaff(tenantId, staffId).orElseThrow();
+    }
+
+    public StaffView disableStaff(String tenantId, String staffId, Instant updatedAt) {
+        jdbc.sql("""
+                        update merchant_staff
+                        set status = 'DISABLED',
+                            updated_at = :updatedAt
+                        where tenant_id = :tenantId
+                          and id = :staffId
+                          and status = 'ACTIVE'
+                        """)
                 .param("updatedAt", utc(updatedAt))
                 .param("tenantId", tenantId)
                 .param("staffId", staffId)

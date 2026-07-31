@@ -4,6 +4,7 @@ const state = {
   overview: null,
   documents: [],
   staff: [],
+  selectedDatasetId: null,
   editingDocumentId: null,
   activeView: "overview",
 };
@@ -117,13 +118,12 @@ async function refreshOverview() {
   const preferred = datasets.find((item) => item.status === "DRAFT")
     || datasets.find((item) => item.status === "ACTIVE")
     || datasets[0];
-
-  const select = $("#dataset-select");
-  select.innerHTML = datasets.map((item) =>
-    `<option value="${item.id}" ${item.id === preferred?.id ? "selected" : ""}>${escapeHtml(item.name)} v${item.version} · ${item.status}</option>`
-  ).join("");
-
+  state.selectedDatasetId = preferred?.id || null;
   if (preferred) await loadDocuments(preferred.id);
+  else {
+    state.documents = [];
+    renderDocuments();
+  }
   renderOverview();
   renderSettings();
 }
@@ -135,8 +135,9 @@ async function loadDocuments(datasetId) {
 }
 
 function selectedDataset() {
-  const datasetId = $("#dataset-select").value;
-  return state.overview?.datasets?.find((item) => item.id === datasetId) || null;
+  return state.overview?.datasets?.find(
+    (item) => item.id === state.selectedDatasetId
+  ) || null;
 }
 
 async function ensureEditableDataset() {
@@ -149,8 +150,8 @@ async function ensureEditableDataset() {
     method: "POST",
   });
   await refreshOverview();
-  $("#dataset-select").value = draft.id;
-  if (selectedDataset()?.id !== draft.id) {
+  state.selectedDatasetId = draft.id;
+  if (selectedDataset()?.id !== draft.id || state.documents[0]?.dataset_id !== draft.id) {
     await loadDocuments(draft.id);
   }
   return draft.id;
@@ -213,67 +214,116 @@ function renderOverview() {
 
 function renderDocuments() {
   const list = $("#document-list");
+  const dataset = selectedDataset();
   const editable = selectedDataset()?.status === "DRAFT";
   $("#publish-button").disabled = !editable;
-  $("#publish-button").title = editable ? "" : "正式版不需要再次發布";
+  $("#publish-button").title = editable ? "" : "修改內容後才需要發布";
+  $("#document-total").textContent = `${state.documents.length} 筆`;
+  const version = $("#knowledge-version");
+  if (dataset) {
+    const draft = dataset.status === "DRAFT";
+    version.className = `knowledge-version ${draft ? "draft" : "published"}`;
+    version.textContent = `${draft ? "待發布草稿" : "目前正式版"} · v${dataset.version}`;
+  } else {
+    version.className = "knowledge-version";
+    version.textContent = "尚未建立版本";
+  }
   if (!state.documents.length) {
-    list.innerHTML = `<div class="empty-state"><strong>還沒有文件</strong><p>從左側加入第一份已確認的商家知識。</p></div>`;
+    list.innerHTML = `<div class="empty-state"><strong>還沒有知識</strong><p>先新增顧客最常詢問的服務、價格或取消政策。</p><button class="primary compact" data-open-document-form type="button">新增第一筆知識</button></div>`;
     return;
   }
   list.innerHTML = state.documents.map((item) => `
     <article class="document-item">
       <div class="document-item-head">
         <strong>${escapeHtml(item.title)}</strong>
-        <span class="badge ${item.index_status === "FAILED" ? "failed" : ""}">${item.index_status}</span>
+        <span class="badge ${item.index_status === "FAILED" ? "failed" : ""}">${UiUtils.knowledgeIndexStatusLabel(item.index_status)}</span>
       </div>
       <p>${escapeHtml(item.content.slice(0, 110))}${item.content.length > 110 ? "…" : ""}</p>
       <div class="document-actions">
-        ${editable ? `
-          <button class="text-button" type="button" data-document-action="edit" data-document-id="${item.id}">編輯</button>
-          <button class="text-button danger" type="button" data-document-action="delete" data-document-id="${item.id}">刪除</button>
-        ` : `<small>正式版為唯讀；修改時會建立新版草稿。</small>`}
+        <button class="text-button" type="button" data-document-action="edit" data-document-id="${item.id}">編輯</button>
+        <button class="text-button danger" type="button" data-document-action="delete" data-document-id="${item.id}">刪除</button>
+        ${editable ? "" : "<small>修改時會自動建立草稿，不會立即影響顧客。</small>"}
       </div>
     </article>`).join("");
 }
 
-function resetDocumentForm() {
+function resetDocumentForm(hide = true) {
   const form = $("#document-form");
   state.editingDocumentId = null;
   form.reset();
   $("#document-form-eyebrow").textContent = "NEW SOURCE";
-  $("#document-form-title").textContent = "新增知識文件";
-  $("#document-submit").textContent = "加入草稿並索引";
-  $("#document-submit").dataset.defaultLabel = "加入草稿並索引";
-  $("#cancel-document-edit").classList.add("hidden");
+  $("#document-form-title").textContent = "新增知識";
+  $("#document-submit").textContent = "新增並自動索引";
+  $("#document-submit").dataset.defaultLabel = "新增並自動索引";
+  form.classList.toggle("hidden", hide);
 }
 
-function editDocument(documentId) {
-  const document = state.documents.find((item) => item.id === documentId);
-  if (!document) return;
+function openDocumentForm() {
+  resetDocumentForm(false);
+  const form = $("#document-form");
+  form.scrollIntoView({ behavior: "smooth", block: "start" });
+  form.elements.title.focus({ preventScroll: true });
+}
+
+function sameDocumentContent(left, right) {
+  return left.title === right.title
+    && left.content === right.content
+    && (left.source_url || "") === (right.source_url || "");
+}
+
+async function ensureEditableDocument(document) {
+  if (selectedDataset()?.status !== "DRAFT") {
+    await ensureEditableDataset();
+  }
+  const current = state.documents.find((item) => item.id === document.id);
+  if (current) return current;
+  const copied = state.documents.find((item) => sameDocumentContent(item, document));
+  if (!copied) throw new Error("無法在新草稿中找到這筆知識，請重新整理後再試");
+  return copied;
+}
+
+async function editDocument(documentId) {
+  const original = state.documents.find((item) => item.id === documentId);
+  if (!original) return;
+  const document = await ensureEditableDocument(original);
   state.editingDocumentId = document.id;
   const form = $("#document-form");
   form.elements.title.value = document.title;
   form.elements.content.value = document.content;
   form.elements.source_url.value = document.source_url || "";
   $("#document-form-eyebrow").textContent = "EDIT SOURCE";
-  $("#document-form-title").textContent = "編輯知識文件";
-  $("#document-submit").textContent = "儲存修改並重新索引";
-  $("#document-submit").dataset.defaultLabel = "儲存修改並重新索引";
-  $("#cancel-document-edit").classList.remove("hidden");
+  $("#document-form-title").textContent = "編輯知識";
+  $("#document-submit").textContent = "儲存修改";
+  $("#document-submit").dataset.defaultLabel = "儲存修改";
+  form.classList.remove("hidden");
   form.scrollIntoView({ behavior: "smooth", block: "start" });
+  form.elements.title.focus({ preventScroll: true });
 }
 
 function renderSettings() {
   const line = state.overview.line_channel;
+  const configured = Boolean(line.configured);
+  const enabled = configured && Boolean(line.enabled);
+  const setup = UiUtils.lineSetupState(configured, enabled);
+  $$("[data-line-step]").forEach((step, index) => {
+    const done = setup.completed[step.dataset.lineStep];
+    const active = step.dataset.lineStep === setup.current;
+    step.classList.toggle("done", done);
+    step.classList.toggle("active", active);
+    step.querySelector("span").textContent = done ? "✓" : String(index + 1);
+    if (active) step.setAttribute("aria-current", "step");
+    else step.removeAttribute("aria-current");
+  });
+  $("#line-setup-status").textContent = setup.message;
   $("#webhook-url").textContent = line.webhook_url;
   const health = $("#channel-health-card");
-  health.classList.toggle("ready", line.configured && line.enabled);
-  health.classList.toggle("off", !line.configured || !line.enabled);
-  $("#channel-health-title").textContent = line.configured
-    ? (line.enabled ? "LINE Channel 已連線" : "LINE Channel 已停用")
+  health.classList.toggle("ready", enabled);
+  health.classList.toggle("off", !enabled);
+  $("#channel-health-title").textContent = configured
+    ? (enabled ? "LINE Channel 已連線" : "LINE Channel 已停用")
     : "尚未連接 LINE Channel";
-  $("#line-status").textContent = line.configured
-    ? (line.enabled ? "Webhook 已建立，可接收與回覆顧客訊息。" : "憑證已保存，但目前不會回覆訊息。")
+  $("#line-status").textContent = configured
+    ? (enabled ? "Webhook 已建立，可接收與回覆顧客訊息。" : "憑證已保存，但目前不會回覆訊息。")
     : "完成左側憑證設定後，再把 Webhook URL 貼到 LINE Developers Console。";
 }
 
@@ -296,7 +346,6 @@ function renderStaff() {
   };
   list.innerHTML = state.staff.map((staff) => {
     const roleLabel = UiUtils.roleLabel(staff.role);
-    const statusLabel = staff.status === "ACTIVE" ? "啟用中" : "已停用";
     const initial = escapeHtml((staff.display_name || "店").trim().slice(0, 1));
     return `
     <article class="staff-item" data-staff-id="${escapeHtml(staff.id)}">
@@ -308,7 +357,7 @@ function renderStaff() {
             <div class="staff-meta"><span class="staff-role">${escapeHtml(roleLabel)}</span><small>${new Date(staff.created_at).toLocaleString("zh-TW")}</small></div>
           </div>
         </div>
-        <span class="badge status-label ${staff.status === "ACTIVE" ? "" : "failed"}">${statusLabel}</span>
+        <button class="text-button danger staff-remove-button" data-remove-staff type="button">移除綁定</button>
       </div>
       <p class="staff-menu-note">${escapeHtml(roleDescriptions[staff.role] || "依角色顯示對應的 LINE 管理入口。")}</p>
       <details class="staff-details">
@@ -320,12 +369,6 @@ function renderStaff() {
               <option value="OWNER" ${staff.role === "OWNER" ? "selected" : ""}>擁有者</option>
               <option value="MANAGER" ${staff.role === "MANAGER" ? "selected" : ""}>管理員</option>
               <option value="VIEWER" ${staff.role === "VIEWER" ? "selected" : ""}>檢視者</option>
-            </select>
-          </label>
-          <label>狀態
-            <select data-staff-field="status">
-              <option value="ACTIVE" ${staff.status === "ACTIVE" ? "selected" : ""}>啟用</option>
-              <option value="DISABLED" ${staff.status === "DISABLED" ? "selected" : ""}>停用</option>
             </select>
           </label>
           <label>每日摘要時間<input data-staff-field="daily_summary_time" type="time" value="${escapeHtml((staff.daily_summary_time || "08:00").slice(0, 5))}"></label>
@@ -531,6 +574,27 @@ $("#refresh-staff").addEventListener("click", async () => {
 });
 
 $("#staff-list").addEventListener("click", async (event) => {
+  const removeButton = event.target.closest("[data-remove-staff]");
+  if (removeButton) {
+    const item = removeButton.closest("[data-staff-id]");
+    const staff = state.staff.find((entry) => entry.id === item.dataset.staffId);
+    if (!staff || !window.confirm(
+      `確定移除「${staff.display_name}」的 LINE 管理綁定？\n\n移除後會立即失去管理權限，個人圖文選單將在背景解除。`
+    )) return;
+    removeButton.disabled = true;
+    try {
+      await api(`/staff/${encodeURIComponent(item.dataset.staffId)}`, {
+        method: "DELETE",
+      });
+      await loadStaff();
+      toast("人員綁定已移除");
+    } catch (error) {
+      toast(error.message, true);
+      removeButton.disabled = false;
+    }
+    return;
+  }
+
   const button = event.target.closest("[data-save-staff]");
   if (!button) return;
   const item = button.closest("[data-staff-id]");
@@ -542,7 +606,6 @@ $("#staff-list").addEventListener("click", async (event) => {
       body: JSON.stringify({
         display_name: field("display_name").value.trim(),
         role: field("role").value,
-        status: field("status").value,
         notify_new_booking: field("notify_new_booking").checked,
         notify_cancellation: field("notify_cancellation").checked,
         daily_summary_enabled: field("daily_summary_enabled").checked,
@@ -558,14 +621,14 @@ $("#staff-list").addEventListener("click", async (event) => {
   }
 });
 
-$("#dataset-select").addEventListener("change", (event) => loadDocuments(event.target.value));
+$("#open-document-form").addEventListener("click", openDocumentForm);
 
 $("#document-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = formData(form);
   const editingDocumentId = state.editingDocumentId;
-  setSubmitting(form, true, editingDocumentId ? "儲存並索引中…" : "加入並索引中…");
+  setSubmitting(form, true, editingDocumentId ? "儲存中…" : "新增中…");
   try {
     const datasetId = await ensureEditableDataset();
     const query = new URLSearchParams({ datasetId });
@@ -580,36 +643,55 @@ $("#document-form").addEventListener("submit", async (event) => {
     });
     await loadDocuments(datasetId);
     renderOverview();
-    toast(editingDocumentId ? "文件已更新並完成索引" : "文件已加入並完成索引");
+    toast(editingDocumentId ? "知識已更新並完成索引" : "知識已新增並完成索引");
   } catch (error) {
     toast(error.message, true);
   } finally {
-    setSubmitting(form, false, editingDocumentId ? "儲存並索引中…" : "加入並索引中…");
+    setSubmitting(form, false, editingDocumentId ? "儲存中…" : "新增中…");
   }
 });
 
-$("#cancel-document-edit").addEventListener("click", resetDocumentForm);
+$("#cancel-document-edit").addEventListener("click", () => resetDocumentForm());
 
 $("#document-list").addEventListener("click", async (event) => {
+  if (event.target.closest("[data-open-document-form]")) {
+    openDocumentForm();
+    return;
+  }
   const button = event.target.closest("[data-document-action]");
   if (!button) return;
   const documentId = button.dataset.documentId;
   if (button.dataset.documentAction === "edit") {
-    editDocument(documentId);
+    button.disabled = true;
+    try {
+      await editDocument(documentId);
+    } catch (error) {
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
     return;
   }
   const document = state.documents.find((item) => item.id === documentId);
-  if (!document || !window.confirm(`確定刪除「${document.title}」？此變更會在發布草稿後生效。`)) return;
+  if (!document || !window.confirm(
+    `確定刪除「${document.title}」？\n\n刪除會先保存在草稿，發布更新後才會影響顧客。`
+  )) return;
+  button.disabled = true;
   try {
     const datasetId = await ensureEditableDataset();
-    await api(`/documents?${new URLSearchParams({ datasetId, documentId })}`, {
+    const editableDocument = await ensureEditableDocument(document);
+    await api(`/documents?${new URLSearchParams({
+      datasetId,
+      documentId: editableDocument.id,
+    })}`, {
       method: "DELETE",
     });
     await loadDocuments(datasetId);
     renderOverview();
-    toast("文件已從草稿刪除");
+    toast("知識已從草稿移除");
   } catch (error) {
     toast(error.message, true);
+    button.disabled = false;
   }
 });
 
@@ -627,6 +709,7 @@ $("#upload-button").addEventListener("click", async () => {
     input.value = "";
     await loadDocuments(datasetId);
     renderOverview();
+    resetDocumentForm();
     toast("檔案已上傳並完成索引");
   } catch (error) { toast(error.message, true); }
 });
@@ -635,7 +718,7 @@ $("#answer-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = formData(form);
-  const datasetId = $("#dataset-select").value;
+  const datasetId = state.selectedDatasetId;
   if (!datasetId) return toast("請先建立資料集", true);
   setSubmitting(form, true, "產生回答中…");
   try {
@@ -683,23 +766,40 @@ $("#line-form").addEventListener("submit", async (event) => {
 });
 
 $("#publish-button").addEventListener("click", async () => {
-  const datasetId = $("#dataset-select").value;
+  const datasetId = state.selectedDatasetId;
   if (!datasetId) return toast("沒有可發布的資料集", true);
+  const button = $("#publish-button");
+  button.disabled = true;
+  const label = button.textContent;
+  button.textContent = "發布中…";
   try {
     await api(`/datasets/publish?datasetId=${encodeURIComponent(datasetId)}`, { method: "POST" });
     await refreshOverview();
-    toast("知識庫已發布");
-  } catch (error) { toast(error.message, true); }
+    toast("知識更新已發布給顧客");
+  } catch (error) {
+    toast(error.message, true);
+    button.disabled = false;
+  } finally {
+    button.textContent = label;
+  }
 });
 
 $("#reindex-button").addEventListener("click", async () => {
-  const datasetId = $("#dataset-select").value;
+  const datasetId = state.selectedDatasetId;
   if (!datasetId) return toast("沒有可索引的資料集", true);
+  const button = $("#reindex-button");
+  button.disabled = true;
+  button.textContent = "重建索引中…";
   try {
     const result = await api(`/datasets/reindex?datasetId=${encodeURIComponent(datasetId)}`, { method: "POST" });
     await loadDocuments(datasetId);
     toast(`重新索引完成：${result.indexed} 成功，${result.failed} 失敗`);
-  } catch (error) { toast(error.message, true); }
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    button.disabled = false;
+    button.textContent = "重新建立全部索引";
+  }
 });
 
 $("#copy-webhook").addEventListener("click", async () => {

@@ -362,6 +362,126 @@ class MerchantBookingManagementIntegrationTest {
                 .containsExactly("false", "READY");
     }
 
+    @Test
+    void portalCanRemoveAStaffBindingAndTheSameLineCanBindAgain()
+            throws Exception {
+        Tenant tenant = createTenant("remove-staff");
+        configureLineChannel(tenant);
+        PortalSession portal = loginPortal(tenant);
+
+        String ownerCode = json(mvc.perform(post("/portal/api/staff-links")
+                        .session(portal.session())
+                        .header("X-CSRF-Token", portal.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"display_name":"保留店主","role":"OWNER"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn())
+                .path("code")
+                .asText();
+        processLineText(tenant, "U-remove-owner", "綁定 " + ownerCode);
+
+        String managerCode = json(mvc.perform(post("/portal/api/staff-links")
+                        .session(portal.session())
+                        .header("X-CSRF-Token", portal.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"display_name":"暫時店員","role":"MANAGER"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn())
+                .path("code")
+                .asText();
+        processLineText(tenant, "U-remove-manager", "綁定 " + managerCode);
+
+        String ownerId = jdbc.sql("""
+                        select id from merchant_staff
+                        where tenant_id = :tenantId and display_name = '保留店主'
+                        """)
+                .param("tenantId", tenant.id())
+                .query(String.class)
+                .single();
+        String managerId = jdbc.sql("""
+                        select id from merchant_staff
+                        where tenant_id = :tenantId and display_name = '暫時店員'
+                        """)
+                .param("tenantId", tenant.id())
+                .query(String.class)
+                .single();
+
+        mvc.perform(delete("/portal/api/staff/{staffId}", ownerId)
+                        .session(portal.session())
+                        .header("X-CSRF-Token", portal.csrfToken()))
+                .andExpect(status().isConflict());
+
+        mvc.perform(delete("/portal/api/staff/{staffId}", managerId)
+                        .session(portal.session())
+                        .header("X-CSRF-Token", portal.csrfToken()))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/portal/api/staff").session(portal.session()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].display_name").value("保留店主"));
+
+        assertThat(jdbc.sql("""
+                                select status from merchant_staff
+                                where tenant_id = :tenantId and id = :staffId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .param("staffId", managerId)
+                        .query(String.class)
+                        .single())
+                .isEqualTo("DISABLED");
+        assertThat(jdbc.sql("""
+                                select desired_linked, status
+                                from merchant_rich_menu_sync
+                                where tenant_id = :tenantId and staff_id = :staffId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .param("staffId", managerId)
+                        .query((rs, rowNum) -> List.of(
+                                Boolean.toString(rs.getBoolean("desired_linked")),
+                                rs.getString("status")))
+                        .single())
+                .containsExactly("false", "READY");
+
+        String reboundCode = json(mvc.perform(post("/portal/api/staff-links")
+                        .session(portal.session())
+                        .header("X-CSRF-Token", portal.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"display_name":"重新加入店員","role":"VIEWER"}
+                                """))
+                .andExpect(status().isCreated())
+                .andReturn())
+                .path("code")
+                .asText();
+        processLineText(tenant, "U-remove-manager", "綁定 " + reboundCode);
+
+        assertThat(jdbc.sql("""
+                                select count(*) from merchant_staff
+                                where tenant_id = :tenantId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(2);
+        assertThat(jdbc.sql("""
+                                select display_name, role, status
+                                from merchant_staff
+                                where tenant_id = :tenantId and id = :staffId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .param("staffId", managerId)
+                        .query((rs, rowNum) -> List.of(
+                                rs.getString("display_name"),
+                                rs.getString("role"),
+                                rs.getString("status")))
+                        .single())
+                .containsExactly("重新加入店員", "VIEWER", "ACTIVE");
+    }
+
     private PortalSession loginPortal(Tenant tenant) throws Exception {
         MvcResult login = mvc.perform(post("/portal/api/session")
                         .contentType(MediaType.APPLICATION_JSON)

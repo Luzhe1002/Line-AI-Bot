@@ -42,3 +42,33 @@ test("merchant roles have localized labels", () => {
   assert.equal(UiUtils.roleLabel("VIEWER"), "檢視者");
   assert.equal(UiUtils.roleLabel("CUSTOM"), "CUSTOM");
 });
+
+test("knowledge index status uses merchant-friendly labels", () => {
+  assert.equal(UiUtils.knowledgeIndexStatusLabel("READY"), "可使用");
+  assert.equal(UiUtils.knowledgeIndexStatusLabel("FAILED"), "索引失敗");
+  assert.equal(UiUtils.knowledgeIndexStatusLabel("INDEXING"), "處理中");
+  assert.equal(UiUtils.knowledgeIndexStatusLabel("PENDING"), "等待處理");
+});
+
+test("LINE setup state reflects credentials and enabled status", () => {
+  assert.deepEqual(UiUtils.lineSetupState(false, false).completed, {
+    credentials: false,
+    webhook: false,
+    status: false,
+  });
+  assert.equal(UiUtils.lineSetupState(false, false).current, "credentials");
+
+  assert.deepEqual(UiUtils.lineSetupState(true, false).completed, {
+    credentials: true,
+    webhook: true,
+    status: false,
+  });
+  assert.equal(UiUtils.lineSetupState(true, false).current, "status");
+
+  assert.deepEqual(UiUtils.lineSetupState(true, true).completed, {
+    credentials: true,
+    webhook: true,
+    status: true,
+  });
+  assert.equal(UiUtils.lineSetupState(true, true).current, null);
+});

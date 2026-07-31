@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css?v=20260731-2">
-  <script src="/shared/ui-utils.js?v=20260731" defer></script>
-  <script src="/portal/app.js?v=20260731-2" defer></script>
+  <link rel="stylesheet" href="/portal/styles.css?v=20260731-3">
+  <script src="/shared/ui-utils.js?v=20260731-3" defer></script>
+  <script src="/portal/app.js?v=20260731-3" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -199,31 +199,41 @@
 
       <section id="view-knowledge" class="view hidden">
         <div class="section-heading">
-          <div><p class="eyebrow">KNOWLEDGE STUDIO</p><h2>知識庫工作台</h2><p class="muted">先建立草稿、加入可信內容，測試後再發布。</p></div>
-          <div class="action-row"><button id="reindex-button" class="secondary">重新索引</button><button id="publish-button" class="primary compact">發布此版本</button></div>
-        </div>
-        <div class="content-grid">
-          <form id="document-form" class="panel stack">
-            <div><p class="eyebrow" id="document-form-eyebrow">NEW SOURCE</p><h3 id="document-form-title">新增知識文件</h3></div>
-            <label>標題<input name="title" required maxlength="240" placeholder="例如：取消與改期政策"></label>
-            <label>內容<textarea name="content" required maxlength="100000" rows="10" placeholder="貼上已確認、可公開提供給顧客的內容"></textarea></label>
-            <label>來源網址（選填）<input name="source_url" type="url" maxlength="1024"></label>
-            <div class="action-row">
-              <button id="document-submit" class="primary" type="submit">加入草稿並索引</button>
-              <button id="cancel-document-edit" class="secondary hidden" type="button">取消編輯</button>
-            </div>
-            <div class="upload-divider"><span>或匯入檔案</span></div>
-            <label>TXT、Markdown 或 CSV（UTF-8，最多 100,000 字）
-              <input id="knowledge-file" type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv">
-            </label>
-            <button id="upload-button" class="secondary" type="button">上傳並索引檔案</button>
-            <p class="fine-print">歷史對話匯入將在下一階段先經過個資遮蔽與人工審核，不會直接加入正式知識。</p>
-          </form>
-          <div class="panel">
-            <div class="panel-head"><div><p class="eyebrow">SOURCES</p><h3>目前文件</h3></div><select id="dataset-select" aria-label="資料集"></select></div>
-            <div id="document-list" class="document-list"></div>
+          <div><p class="eyebrow">KNOWLEDGE STUDIO</p><h2>顧客會用到的知識</h2><p class="muted">直接新增、修改或刪除；系統會自動建立草稿並完成索引。</p></div>
+          <div class="action-row">
+            <div id="knowledge-version" class="knowledge-version" aria-live="polite">正在讀取版本</div>
+            <button id="open-document-form" class="primary compact" type="button">新增知識</button>
+            <button id="publish-button" class="secondary" type="button">發布更新</button>
           </div>
         </div>
+        <form id="document-form" class="panel stack knowledge-editor hidden">
+          <div><p class="eyebrow" id="document-form-eyebrow">NEW SOURCE</p><h3 id="document-form-title">新增知識</h3><p class="muted">儲存後會自動索引，不需要另外按「重新索引」。</p></div>
+          <label>標題<input name="title" required maxlength="240" placeholder="例如：取消與改期政策"></label>
+          <label>內容<textarea name="content" required maxlength="100000" rows="10" placeholder="貼上已確認、可公開提供給顧客的內容"></textarea></label>
+          <label>來源網址（選填）<input name="source_url" type="url" maxlength="1024"></label>
+          <div class="action-row">
+            <button id="document-submit" class="primary" type="submit">新增並自動索引</button>
+            <button id="cancel-document-edit" class="secondary" type="button">取消</button>
+          </div>
+          <div class="upload-divider"><span>或匯入檔案</span></div>
+          <label>TXT、Markdown 或 CSV（UTF-8，最多 100,000 字）
+            <input id="knowledge-file" type="file" accept=".txt,.md,.csv,text/plain,text/markdown,text/csv">
+          </label>
+          <button id="upload-button" class="secondary" type="button">上傳並自動索引</button>
+          <p class="fine-print">歷史對話匯入將在下一階段先經過個資遮蔽與人工審核，不會直接加入正式知識。</p>
+        </form>
+        <div class="panel knowledge-list-panel">
+          <div class="panel-head">
+            <div><p class="eyebrow">KNOWLEDGE ITEMS</p><h3>知識清單</h3><p class="muted">每筆內容都能直接編輯或移除，變更發布前不會影響顧客。</p></div>
+            <strong id="document-total" class="document-total">0 筆</strong>
+          </div>
+          <div id="document-list" class="document-list"></div>
+        </div>
+        <details class="panel advanced-actions">
+          <summary>索引異常處理</summary>
+          <p class="muted">一般不需要操作。只有更換 AI 模型，或文件顯示「索引失敗」時，才需要重建全部索引。</p>
+          <button id="reindex-button" class="secondary" type="button">重新建立全部索引</button>
+        </details>
       </section>
 
       <section id="view-tester" class="view hidden">
@@ -285,10 +295,11 @@
 
       <section id="view-settings" class="view hidden">
         <div class="section-heading"><div><p class="eyebrow">CHANNEL SETUP</p><h2>連接 LINE 官方帳號</h2><p class="muted">敏感憑證會由後端加密保存，頁面不會再次顯示。</p></div></div>
+        <p id="line-setup-status" class="setup-status" aria-live="polite">正在確認 LINE 設定狀態</p>
         <ol class="setup-steps" aria-label="LINE 設定步驟">
-          <li class="active"><span>1</span><div><strong>安全填入憑證</strong><small>Channel Secret 與 Access Token</small></div></li>
-          <li><span>2</span><div><strong>設定 Webhook</strong><small>複製網址到 LINE Developers</small></div></li>
-          <li><span>3</span><div><strong>確認服務狀態</strong><small>檢查是否已連線並啟用</small></div></li>
+          <li data-line-step="credentials"><span>1</span><div><strong>安全填入憑證</strong><small>Channel Secret 與 Access Token</small></div></li>
+          <li data-line-step="webhook"><span>2</span><div><strong>取得 Webhook 網址</strong><small>複製網址到 LINE Developers</small></div></li>
+          <li data-line-step="status"><span>3</span><div><strong>啟用 LINE 回覆</strong><small>確認 Channel 已連線並啟用</small></div></li>
         </ol>
         <div class="content-grid">
           <form id="line-form" class="panel stack">

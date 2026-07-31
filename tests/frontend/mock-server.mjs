@@ -34,13 +34,54 @@ async function readJson(request) {
   return JSON.parse(Buffer.concat(chunks).toString("utf8"));
 }
 
-function portalApi(pathname, request, response) {
+let portalDocuments;
+let portalStaff;
+let portalHasDraft;
+
+function resetPortalFixture() {
+  portalHasDraft = false;
+  portalDocuments = [{
+    id: "document-1",
+    dataset_id: "dataset-active",
+    title: "預約與取消政策",
+    content: "顧客可透過 LINE 預約，若需要取消請提前聯絡店家。",
+    source_url: null,
+    index_status: "READY",
+  }];
+  portalStaff = [{
+    id: "staff-owner",
+    display_name: "王店長",
+    role: "OWNER",
+    status: "ACTIVE",
+    notify_new_booking: true,
+    notify_cancellation: true,
+    daily_summary_enabled: true,
+    daily_summary_time: "08:00:00",
+    created_at: "2026-07-30T01:00:00Z",
+  }, {
+    id: "staff-manager",
+    display_name: "林主管",
+    role: "MANAGER",
+    status: "ACTIVE",
+    notify_new_booking: true,
+    notify_cancellation: true,
+    daily_summary_enabled: false,
+    daily_summary_time: "08:00:00",
+    created_at: "2026-07-30T02:00:00Z",
+  }];
+}
+
+resetPortalFixture();
+
+function portalApi(url, request, response) {
+  const pathname = url.pathname;
   if (!pathname.startsWith("/portal/api/")) return false;
   const endpoint = pathname.slice("/portal/api".length);
   const authenticated = (request.headers.cookie || "").includes("portal-e2e=1");
   const tenant = { id: "tenant-demo", name: "暖心咖啡", slug: "demo" };
 
   if (endpoint === "/line-session" && request.method === "POST") {
+    resetPortalFixture();
     sendJson(response, 200, {
       authenticated: true,
       csrf_token: "portal-csrf",
@@ -71,38 +112,121 @@ function portalApi(pathname, request, response) {
         webhook_url: "https://example.test/webhooks/line/demo",
       },
       business_hours: [{ active: true }],
-      datasets: [{
-        id: "dataset-active",
-        name: "正式客服知識",
-        version: 3,
-        status: "ACTIVE",
-        published_at: "2026-07-31T08:00:00Z",
-      }],
+      datasets: portalHasDraft
+        ? [{
+          id: "dataset-draft",
+          name: "正式客服知識",
+          version: 4,
+          status: "DRAFT",
+          published_at: null,
+        }, {
+          id: "dataset-active",
+          name: "正式客服知識",
+          version: 3,
+          status: "ACTIVE",
+          published_at: "2026-07-31T08:00:00Z",
+        }]
+        : [{
+          id: "dataset-active",
+          name: "正式客服知識",
+          version: 3,
+          status: "ACTIVE",
+          published_at: "2026-07-31T08:00:00Z",
+        }],
     });
     return true;
   }
-  if (endpoint === "/documents") {
-    sendJson(response, 200, [{
-      id: "document-1",
-      title: "預約與取消政策",
-      content: "顧客可透過 LINE 預約，若需要取消請提前聯絡店家。",
-      source_url: null,
-      index_status: "READY",
-    }]);
+  if (endpoint === "/datasets/draft" && request.method === "POST") {
+    portalHasDraft = true;
+    portalDocuments = portalDocuments.map((document, index) => ({
+      ...document,
+      id: `draft-copy-${index + 1}`,
+      dataset_id: "dataset-draft",
+    }));
+    sendJson(response, 201, {
+      id: "dataset-draft",
+      name: "正式客服知識",
+      version: 4,
+      status: "DRAFT",
+      published_at: null,
+    });
     return true;
   }
-  if (endpoint === "/staff") {
-    sendJson(response, 200, [{
-      id: "staff-owner",
-      display_name: "王店長",
-      role: "OWNER",
+  if (endpoint === "/datasets/publish" && request.method === "POST") {
+    portalHasDraft = false;
+    sendJson(response, 200, {
+      id: "dataset-active",
+      name: "正式客服知識",
+      version: 4,
       status: "ACTIVE",
-      notify_new_booking: true,
-      notify_cancellation: true,
-      daily_summary_enabled: true,
-      daily_summary_time: "08:00:00",
-      created_at: "2026-07-30T01:00:00Z",
-    }]);
+      published_at: "2026-07-31T09:00:00Z",
+    });
+    return true;
+  }
+  if (endpoint === "/datasets/reindex" && request.method === "POST") {
+    sendJson(response, 200, { indexed: portalDocuments.length, failed: 0, errors: [] });
+    return true;
+  }
+  if (endpoint === "/documents" && request.method === "GET") {
+    sendJson(response, 200, portalDocuments);
+    return true;
+  }
+  if (endpoint === "/documents" && request.method === "POST") {
+    readJson(request).then((body) => {
+      const document = {
+        id: `document-${portalDocuments.length + 1}`,
+        dataset_id: url.searchParams.get("datasetId"),
+        title: body.title,
+        content: body.content,
+        source_url: body.source_url,
+        index_status: "READY",
+      };
+      portalDocuments.push(document);
+      sendJson(response, 201, document);
+    });
+    return true;
+  }
+  if (endpoint === "/documents" && request.method === "PUT") {
+    readJson(request).then((body) => {
+      const document = portalDocuments.find(
+        (item) => item.id === url.searchParams.get("documentId")
+      );
+      Object.assign(document, body, { index_status: "READY" });
+      sendJson(response, 200, document);
+    });
+    return true;
+  }
+  if (endpoint === "/documents" && request.method === "DELETE") {
+    portalDocuments = portalDocuments.filter(
+      (item) => item.id !== url.searchParams.get("documentId")
+    );
+    sendEmpty(response);
+    return true;
+  }
+  if (endpoint === "/staff" && request.method === "GET") {
+    sendJson(response, 200, portalStaff);
+    return true;
+  }
+  if (endpoint.startsWith("/staff/") && request.method === "DELETE") {
+    const staffId = endpoint.slice("/staff/".length);
+    const staff = portalStaff.find((item) => item.id === staffId);
+    if (staff?.role === "OWNER"
+        && portalStaff.filter((item) => item.role === "OWNER").length <= 1) {
+      sendJson(response, 409, { detail: "至少需要保留一位擁有者" });
+      return true;
+    }
+    portalStaff = portalStaff.filter((item) => item.id !== staffId);
+    sendEmpty(response);
+    return true;
+  }
+  if (endpoint.startsWith("/staff/") && request.method === "PUT") {
+    readJson(request).then((body) => {
+      const staff = portalStaff.find(
+        (item) => item.id === endpoint.slice("/staff/".length)
+      );
+      Object.assign(staff, body);
+      sendJson(response, 200, staff);
+    });
     return true;
   }
   sendJson(response, 404, { detail: "找不到商家工作台測試端點" });
@@ -245,7 +369,7 @@ async function serveStatic(pathname, response) {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || `${host}:${port}`}`);
-  if (portalApi(url.pathname, request, response)) return;
+  if (portalApi(url, request, response)) return;
   if (bookingApi(url.pathname, url, request, response)) return;
   if (merchantApi(url.pathname, url, request, response)) return;
   await serveStatic(url.pathname, response);

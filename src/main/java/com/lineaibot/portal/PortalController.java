@@ -227,6 +227,16 @@ public class PortalController {
         return merchantStaff.update(requireTenant(session).id(), staffId, request);
     }
 
+    @DeleteMapping("/staff/{staffId}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void removeStaff(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @PathVariable String staffId) {
+        requireCsrf(session, csrfToken);
+        merchantStaff.remove(requireTenant(session).id(), staffId);
+    }
+
     @PostMapping("/datasets")
     @ResponseStatus(HttpStatus.CREATED)
     DatasetRead createDataset(
