@@ -72,8 +72,9 @@ public class BookingNotificationProcessor {
                     event.tenantId(), event.reservationId());
             var recipients = merchants.listNotificationStaff(
                     event.tenantId(), event.eventType());
-            boolean notifyCustomer = "RESERVATION_CANCELLED".equals(event.eventType())
-                    && !"CUSTOMER".equals(event.actorType());
+            boolean notifyCustomer = "RESERVATION_CREATED".equals(event.eventType())
+                    || ("RESERVATION_CANCELLED".equals(event.eventType())
+                            && !"CUSTOMER".equals(event.actorType()));
             if (recipients.isEmpty() && !notifyCustomer) {
                 events.markProcessed(eventId, Instant.now());
                 return;
@@ -106,7 +107,7 @@ public class BookingNotificationProcessor {
                         tenant.id(),
                         channelToken,
                         reservation.lineUserId(),
-                        customerCancellationMessage(reservation, tenant.timezone()),
+                        customerMessage(event, reservation, tenant.timezone()),
                         "booking-event:" + event.id() + ":customer");
             }
             events.markProcessed(eventId, Instant.now());
@@ -160,15 +161,33 @@ public class BookingNotificationProcessor {
         return List.of(message);
     }
 
-    private List<Map<String, Object>> customerCancellationMessage(
-            BookingDtos.ReservationRead reservation, String timezone) {
+    private List<Map<String, Object>> customerMessage(
+            BookingEventRepository.BookingEventRow event,
+            BookingDtos.ReservationRead reservation,
+            String timezone) {
         String time = DATE_TIME.format(
                 reservation.startsAt().atZone(ZoneId.of(timezone)));
+        String text;
+        if ("RESERVATION_CREATED".equals(event.eventType())) {
+            String customerName = reservation.customerName() == null
+                            || reservation.customerName().isBlank()
+                    ? "未填姓名"
+                    : reservation.customerName();
+            text = "預約成功！"
+                    + "\n時間："
+                    + time
+                    + "\n預約姓名："
+                    + customerName
+                    + "\n預約編號："
+                    + shortId(reservation.id());
+        } else {
+            text = "店家已取消您在 " + time + " 的預約。\n預約編號：" + shortId(reservation.id());
+        }
         return List.of(Map.of(
                 "type",
                 "text",
                 "text",
-                "店家已取消您在 " + time + " 的預約。\n預約編號：" + reservation.id()));
+                text));
     }
 
     private Map<String, Object> postbackItem(String label, String data) {
