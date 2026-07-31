@@ -49,7 +49,9 @@ app:
   line-worker-enabled: ${APP_LINE_WORKER_ENABLED:true}
   line-worker-delay-ms: ${APP_LINE_WORKER_DELAY_MS:250}
   line-worker-concurrency: ${APP_LINE_WORKER_CONCURRENCY:8}
+  line-rich-menu-worker-delay-ms: ${APP_LINE_RICH_MENU_WORKER_DELAY_MS:2000}
   line-api-base-url: ${APP_LINE_API_BASE_URL:https://api.line.me}
+  line-api-data-base-url: ${APP_LINE_API_DATA_BASE_URL:https://api-data.line.me}
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8000}
   ai:
     provider: ${APP_AI_PROVIDER:local}

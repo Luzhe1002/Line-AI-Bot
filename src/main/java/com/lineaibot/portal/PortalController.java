@@ -13,6 +13,7 @@ import com.lineaibot.merchant.MerchantDtos.StaffLinkCreate;
 import com.lineaibot.merchant.MerchantDtos.StaffLinkView;
 import com.lineaibot.merchant.MerchantDtos.StaffUpdate;
 import com.lineaibot.merchant.MerchantDtos.StaffView;
+import com.lineaibot.merchant.MerchantManageTokenService;
 import com.lineaibot.merchant.MerchantStaffService;
 import com.lineaibot.shared.ApiAuthService;
 import com.lineaibot.shared.ApiException;
@@ -56,6 +57,8 @@ import org.springframework.web.multipart.MultipartFile;
 public class PortalController {
 
     private static final String TENANT_ID = "portalTenantId";
+    private static final String STAFF_ID = "portalStaffId";
+    private static final String AUTH_METHOD = "portalAuthMethod";
     private static final String CSRF_TOKEN = "portalCsrfToken";
     private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
@@ -64,18 +67,21 @@ public class PortalController {
     private final TenantRepository tenantRepository;
     private final KnowledgeService knowledge;
     private final MerchantStaffService merchantStaff;
+    private final MerchantManageTokenService manageTokens;
 
     public PortalController(
             ApiAuthService apiAuth,
             TenantService tenants,
             TenantRepository tenantRepository,
             KnowledgeService knowledge,
-            MerchantStaffService merchantStaff) {
+            MerchantStaffService merchantStaff,
+            MerchantManageTokenService manageTokens) {
         this.apiAuth = apiAuth;
         this.tenants = tenants;
         this.tenantRepository = tenantRepository;
         this.knowledge = knowledge;
         this.merchantStaff = merchantStaff;
+        this.manageTokens = manageTokens;
     }
 
     public record LoginRequest(@NotBlank String tenantId, @NotBlank String apiKey) {}
@@ -100,7 +106,24 @@ public class PortalController {
     @PostMapping("/session")
     SessionView login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
         TenantRow tenant = apiAuth.requireTenantAdmin(request.tenantId(), request.apiKey());
-        return establishSession(httpRequest, tenant);
+        return establishSession(httpRequest, tenant, null, "TENANT_API_KEY", null);
+    }
+
+    @PostMapping("/line-session")
+    SessionView lineLogin(
+            @RequestHeader(name = "Authorization", required = false) String authorization,
+            HttpServletRequest httpRequest) {
+        var identity = manageTokens.consumePortalLogin(bearer(authorization));
+        TenantRow tenant = tenantRepository.findById(identity.tenantId())
+                .filter(TenantRow::active)
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.UNAUTHORIZED, "Merchant management link is invalid"));
+        StaffView staff = merchantStaff.requireActive(tenant.id(), identity.staffId());
+        if (!"OWNER".equals(staff.role())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN, "Only an active owner can access the merchant portal");
+        }
+        return establishSession(httpRequest, tenant, staff.id(), "LINE_OWNER", null);
     }
 
     @PostMapping("/onboarding")
@@ -110,7 +133,8 @@ public class PortalController {
         apiAuth.requirePlatformAdmin(request.platformAdminKey());
         var created = tenants.createTenant(request.tenant());
         TenantRow tenant = tenantRepository.findById(created.id()).orElseThrow();
-        return establishSession(httpRequest, tenant, created.adminApiKey());
+        return establishSession(
+                httpRequest, tenant, null, "PLATFORM_ONBOARDING", created.adminApiKey());
     }
 
     @GetMapping("/session")
@@ -121,6 +145,12 @@ public class PortalController {
         }
         TenantRow tenant = tenantRepository.findById(id).orElse(null);
         if (tenant == null || !tenant.active()) {
+            session.invalidate();
+            return new SessionView(false, null, null, null);
+        }
+        try {
+            requireLineOwnerIfPresent(session, tenant.id());
+        } catch (ApiException exception) {
             session.invalidate();
             return new SessionView(false, null, null, null);
         }
@@ -344,18 +374,23 @@ public class PortalController {
     }
 
     private SessionView establishSession(
-            HttpServletRequest request, TenantRow tenant) {
-        return establishSession(request, tenant, null);
-    }
-
-    private SessionView establishSession(
-            HttpServletRequest request, TenantRow tenant, String tenantApiKey) {
+            HttpServletRequest request,
+            TenantRow tenant,
+            String staffId,
+            String authMethod,
+            String tenantApiKey) {
         HttpSession session = request.getSession(true);
         request.changeSessionId();
         byte[] random = new byte[32];
         SECURE_RANDOM.nextBytes(random);
         String csrfToken = Base64.getUrlEncoder().withoutPadding().encodeToString(random);
         session.setAttribute(TENANT_ID, tenant.id());
+        if (staffId == null) {
+            session.removeAttribute(STAFF_ID);
+        } else {
+            session.setAttribute(STAFF_ID, staffId);
+        }
+        session.setAttribute(AUTH_METHOD, authMethod);
         session.setAttribute(CSRF_TOKEN, csrfToken);
         session.setMaxInactiveInterval(8 * 60 * 60);
         return new SessionView(true, tenant.toRead(), csrfToken, tenantApiKey);
@@ -372,7 +407,20 @@ public class PortalController {
         if (!tenant.active()) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Merchant account is inactive");
         }
+        requireLineOwnerIfPresent(session, tenant.id());
         return tenant;
+    }
+
+    private void requireLineOwnerIfPresent(HttpSession session, String tenantId) {
+        Object staffId = session.getAttribute(STAFF_ID);
+        if (!(staffId instanceof String id)) {
+            return;
+        }
+        StaffView staff = merchantStaff.requireActive(tenantId, id);
+        if (!"OWNER".equals(staff.role())) {
+            throw new ApiException(
+                    HttpStatus.FORBIDDEN, "Merchant owner permission is required");
+        }
     }
 
     private void requireCsrf(HttpSession session, String supplied) {
@@ -384,5 +432,13 @@ public class PortalController {
                         supplied.getBytes(java.nio.charset.StandardCharsets.UTF_8))) {
             throw new ApiException(HttpStatus.FORBIDDEN, "Invalid CSRF token");
         }
+    }
+
+    private String bearer(String authorization) {
+        if (authorization == null || !authorization.startsWith("Bearer ")) {
+            throw new ApiException(
+                    HttpStatus.UNAUTHORIZED, "Merchant management link is invalid");
+        }
+        return authorization.substring("Bearer ".length()).strip();
     }
 }

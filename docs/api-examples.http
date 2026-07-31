@@ -5,6 +5,7 @@
 @datasetId = replace-after-list
 @serviceId = replace-after-list
 @reservationId = replace-after-create
+@ownerPortalToken = issued-only-after-owner-rich-menu-postback
 
 ### Health
 GET {{baseUrl}}/health
@@ -31,6 +32,12 @@ X-Tenant-Api-Key: {{tenantKey}}
   "channel_access_token": "replace-with-line-channel-access-token",
   "enabled": true
 }
+
+### Exchange the OWNER rich-menu login token for an HttpOnly Portal Session
+# The token is issued only after an ACTIVE OWNER taps the personal rich menu.
+# It is valid for ten minutes, single-use, and can't be used by booking APIs.
+POST {{baseUrl}}/portal/api/line-session
+Authorization: Bearer {{ownerPortalToken}}
 
 ### List default business hours
 GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/business-hours

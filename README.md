@@ -1,25 +1,99 @@
-# LINE AI 客服機器人
+# LINE AI 智慧客服與預約管理平台
 
-多商家 LINE 客服、知識庫與一對一時段預約後端。主要執行架構已改為 Java 21、Spring Boot 4、Spring JDBC、Flyway 與 PostgreSQL；原本的 FastAPI 原始碼暫時保留，供資料遷移與契約比對，不再由 Docker Compose 啟動。
+> 面向中小型商家的多租戶 LINE 客服平台，整合 AI 知識庫問答、線上預約、店家人員管理與即時通知。
 
-## 已完成
+[線上工作台](https://line-ai-bot-mj1n.onrender.com/portal/) ·
+[Swagger API](https://line-ai-bot-mj1n.onrender.com/docs) ·
+[系統架構](docs/architecture.md) ·
+[API 操作範例](docs/api-examples.http)
+
+## 專案概覽
+
+顧客可以直接透過 LINE 詢問商家資訊，由系統從該商家的已發布知識庫檢索資料並產生附有來源的回答；需要預約時，則開啟綁定 LINE 身分的行動預約頁選擇時段。店家人員可沿用同一個 LINE 官方帳號查詢、取消及管理預約，不必另外安裝管理 App。
+
+系統採 Java 21／Spring Boot 4 模組化單體架構，使用 Spring JDBC、Flyway 與 PostgreSQL。原 FastAPI 原始碼保留作為遷移與 HTTP 契約比對用途，目前不由 Docker Compose 啟動。
+
+| 使用者 | 主要功能 |
+|---|---|
+| 顧客 | LINE 知識問答、來源引用、人工客服轉接、行動預約與取消通知 |
+| 店家人員 | LINE 身分綁定、預約查詢與取消、時段封鎖、即時通知、每日摘要 |
+| 商家管理員 | 建立商家、設定 LINE Channel 與營業時間、管理知識庫版本與人員權限 |
+
+## 核心架構
+
+```mermaid
+flowchart LR
+    CUSTOMER["顧客／店家人員"] --> LINE["LINE Messaging API"]
+    ADMIN["商家管理員"] --> PORTAL["商家管理工作台"]
+
+    LINE -->|Webhook| VERIFY["原始 Body 簽章驗證<br/>事件去重"]
+    VERIFY --> EVENTS[("PostgreSQL<br/>line_events")]
+    EVENTS --> WORKER["Java 21<br/>Virtual Thread Worker"]
+    WORKER --> ROUTER{"訊息路由"}
+
+    ROUTER --> BOOKING["BookingManager<br/>預約與取消"]
+    ROUTER --> KNOWLEDGE["RAG 知識檢索<br/>Local／OpenAI Provider"]
+    ROUTER --> HANDOFF["人工客服工單"]
+
+    BOOKING --> DB[("租戶資料／預約／知識庫")]
+    KNOWLEDGE --> DB
+    PORTAL --> DB
+
+    BOOKING --> OUTBOX[("Outbox Messages")]
+    KNOWLEDGE --> OUTBOX
+    HANDOFF --> OUTBOX
+    OUTBOX --> LINE
+```
+
+- **LINE 訊息：** Webhook 驗證與去重後先寫入資料庫，再交由有界並行 Worker 處理，降低模型延遲並避免程序重啟造成事件遺失。
+- **AI 問答：** 只檢索相同 `tenant_id`、已發布資料集及相符 Embedding 設定的內容；引用由後端建立，資料不足時轉人工客服。
+- **預約寫入：** 所有建立與取消都由 `BookingManager` 執行，搭配冪等鍵與資料庫唯一時段限制避免重複預約。
+
+完整設計與安全邊界請見 [系統架構](docs/architecture.md)，Message Broker 的取捨與演進條件請見 [ADR-0001](docs/adr/0001-message-queue.md)。
+
+## 技術棧
+
+| 類別 | 技術 | 使用方式 |
+|---|---|---|
+| Backend | Java 21、Spring Boot 4、Spring MVC、Spring JDBC | REST API、模組化商業邏輯與資料存取 |
+| Database | PostgreSQL、H2、Flyway | 正式資料庫、本機開發與版本化 Schema Migration |
+| AI／RAG | OpenAI Embeddings、Responses API、Local Provider | 文件切塊、向量檢索、可信回答與離線測試 |
+| LINE | LINE Messaging API、HMAC-SHA256 | Webhook、Reply／Push Message、Quick Reply 與 Postback |
+| 非同步處理 | Java Virtual Threads、Database-backed Queue、Outbox | 事件持久化、Claim、重試、過期復原及傳送稽核 |
+| Frontend | HTML、CSS、JavaScript | 商家工作台、顧客預約頁與店家手機管理頁 |
+| Delivery | Docker Compose、Render | 容器化本機環境與雲端測試部署 |
+| Testing | JUnit、Spring Boot Test、H2、Pytest | Java 主架構整合測試與舊版契約參考測試 |
+
+## 工程設計亮點
+
+- **多租戶隔離：** 所有商家資料查詢與寫入都明確包含 `tenant_id`，並區分 Platform Admin、Tenant Admin 及 OWNER／MANAGER／VIEWER 權限。
+- **可靠事件處理：** LINE 事件先落庫，以條件式 Claim、最多三次重試及逾時復原支援至少一次處理；Outbox 保留回覆與通知結果。
+- **預約一致性：** 冪等鍵避免相同請求重複建立，預約與店家封鎖共用資料庫時段占用限制，並在同一交易內競爭時段。
+- **可信 AI 邊界：** AI 只能輸出文字，無法直接異動預約；檢索內容受租戶、資料集版本、模型與維度限制。
+- **敏感資料保護：** 管理 API Key 以雜湊保存，LINE Secret／Token 加密保存；工作台使用 HttpOnly Session、CSRF Token 及短效單次憑證。
+- **可替換 AI Provider：** 預設 Local Provider 可完全離線執行與測試，也可切換 OpenAI Provider；更換模型或維度時保留重新索引流程。
+
+## 線上展示
+
+- 商家管理工作台：<https://line-ai-bot-mj1n.onrender.com/portal/>
+- Swagger UI：<https://line-ai-bot-mj1n.onrender.com/docs>
+- OpenAPI JSON：<https://line-ai-bot-mj1n.onrender.com/openapi.json>
+
+測試環境若處於休眠，第一次開啟可能需要等待數十秒。顧客預約頁與店家手機管理頁需要由 LINE 產生綁定租戶及使用者的短效憑證，因此不提供匿名操作入口。
+
+## 主要功能
 
 - 多租戶資料隔離，每個商家有獨立管理 API Key。
-- Platform Admin 與 Tenant Admin 兩層 API 驗證。
+- Platform Admin、Tenant Admin 與店家人員角色驗證。
 - LINE Channel Secret 與 Access Token 加密保存。
-- 使用未修改的 HTTP Body 驗證 LINE HMAC-SHA256 簽章。
-- 以 `tenant_id + webhookEventId` 去重。
-- Webhook 先持久化至 `line_events`，再由有界並行的 Java 21 Virtual Thread Worker 處理。
-- 每個商家同一時段只能有一筆有效預約，支援冪等建立與取消後釋放時段。
-- LINE 文字意圖、預約／取消 Postback、Quick Reply、人工客服工單。
-- 店家人員 LINE 綁定、預約查詢、主動通知、取消確認、每日摘要及手機月曆。
-- 預約與店家封鎖共用資料庫時段占用限制，避免並行操作造成重複占用。
-- 商家知識庫草稿、索引、重新索引、發布、租戶限定檢索及引用。
-- 本機離線 AI Provider；可選 OpenAI Embeddings 與 Responses API。
-- LINE Outbox 稽核；開發模式可模擬傳送，不呼叫 LINE。
-- H2 本機開發、PostgreSQL Docker 環境，以及 Flyway Schema 管理。
-
-詳細設計請見 [系統架構](docs/architecture.md)，MQ 決策請見 [ADR-0001](docs/adr/0001-message-queue.md)，API 操作範例位於 [api-examples.http](docs/api-examples.http)。
+- LINE 原始 Body HMAC-SHA256 簽章驗證及 `tenant_id + webhookEventId` 去重。
+- 持久化 `line_events`、有界 Virtual Thread Worker、失敗重試與 LINE Outbox 稽核。
+- 一對一時段預約、冪等建立、取消釋放時段及店家封鎖共同占用限制。
+- LINE 文字意圖、預約入口、取消確認、人工客服工單及店家管理指令。
+- 店家人員綁定、角色專屬個人圖文選單、預約查詢、主動通知、每日摘要及手機月曆。
+- 知識庫草稿、文件切塊、索引、重新索引、版本發布、租戶限定檢索與引用。
+- 無外部 API Key 的 Local AI Provider，以及可選的 OpenAI Provider。
+- H2 本機開發、PostgreSQL Docker 環境及 Flyway Schema 管理。
 
 ## 最快啟動方式：Docker
 
@@ -128,10 +202,21 @@ APP_SESSION_COOKIE_SECURE=true
 
 1. 在 `/portal/` 的「店家人員」頁產生十分鐘有效、只能使用一次的綁定碼。
 2. 店家人員用私人 LINE 在商家官方帳號聊天室傳送 `綁定 <綁定碼>`。
-3. 綁定完成後輸入 `管理預約`、`今日預約`、`明日預約` 或 `本週預約`。
+3. 正式 LINE 模式會在背景建立角色專屬的個人圖文選單並綁定到該人員。
+4. 圖文選單同步前仍可輸入 `管理預約`、`今日預約`、`明日預約` 或
+   `本週預約`；OWNER 也可輸入 `管理後台` 取得完整工作台連結。
 
 日常操作：
 
+- 一般顧客只會看到商家既有的預設圖文選單；系統不會把管理按鈕加入預設選單。
+- 已綁定人員會看到優先權較高的個人圖文選單，可直接開啟管理入口、今日預約、
+  未來七天預約或切回顧客預約流程。
+- OWNER 點擊「PORTAL」後，Webhook 會再次確認其綁定狀態與角色，再回覆十分鐘
+  有效、單次使用的完整工作台登入連結。連結交換成 HttpOnly Session 後立即
+  從網址移除。
+- MANAGER／VIEWER 的主要入口只開啟預約管理頁；實際寫入權限仍由後端角色檢查。
+- 人員被停權時會排入解除個人圖文選單，完成後自動回到顧客預設選單；角色變更
+  與 LINE Channel 更新也會重新排程同步。
 - 新預約與取消預約會透過可靠的 `booking_events` Worker 主動通知已啟用人員。
 - 店家從 LINE 預約清單執行取消時，必須再次確認；實際異動仍由
   `BookingManager` 執行，並通知顧客。
@@ -139,6 +224,11 @@ APP_SESSION_COOKIE_SECURE=true
   HttpOnly Session 後立即從網址移除，寫入操作另要求 CSRF Token。
 - OWNER／MANAGER 可以封鎖或解除時段；VIEWER 只能查看。
 - 啟用每日摘要後，系統會依商家時區在指定時間推送當日預約。
+
+個人圖文選單使用獨立的資料庫同步工作，LINE API 暫時失敗不會回滾已完成的
+人員綁定。工作會以漸進退避重試，並以 revision 避免舊工作覆蓋新的角色或停權
+狀態。詳細生命週期、故障處理與正式環境檢查方式請見
+[店家個人圖文選單操作手冊](docs/merchant-rich-menus.md)。
 
 顧客輸入「預約」時，LINE 只提供「開啟預約頁」。系統不再用時段 Quick
 Reply 直接建立無姓名預約；顧客必須在預約頁選擇時段並填寫姓名。
@@ -159,6 +249,9 @@ Webhook 的簽章、事件去重、對話、預約與 Outbox 都會執行，但�
 ```dotenv
 APP_LINE_API_ENABLED=true
 ```
+
+測試模式下仍會建立 `merchant_rich_menu_sync` 的期望狀態，但 Worker 不會呼叫
+LINE 或假裝同步成功；切換為真實 LINE 模式後會處理既有 READY 工作。
 
 公開測試時，`APP_PUBLIC_BASE_URL` 必須是 LINE 可連線的 HTTPS 網址，並將商家的 webhook 設定成：
 
@@ -261,3 +354,4 @@ docker compose config --quiet
 | `POST /api/v1/tenants/{id}/datasets/{id}/publish` | 發布資料集 |
 | `POST /api/v1/tenants/{id}/ai/answer` | 測試知識庫回答 |
 | `POST /webhooks/line/{tenantSlug}` | LINE Webhook |
+| `POST /portal/api/line-session` | 以 OWNER 的十分鐘單次 LINE 管理 Token 換取工作台 Session |

@@ -16,7 +16,10 @@ import com.lineaibot.merchant.MerchantManageTokenService;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.UUID;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -112,6 +115,47 @@ class MerchantBookingManagementIntegrationTest {
         assertThat(latestOutbox(tenant.id(), "U-owner", "REPLY"))
                 .contains("管理員綁定成功")
                 .contains("管理預約");
+        assertThat(jdbc.sql("""
+                                select desired_role, desired_linked, status
+                                from merchant_rich_menu_sync
+                                where tenant_id = :tenantId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .query((rs, rowNum) -> List.of(
+                                rs.getString("desired_role"),
+                                Boolean.toString(rs.getBoolean("desired_linked")),
+                                rs.getString("status")))
+                        .single())
+                .containsExactly("OWNER", "true", "READY");
+        assertThat(jdbc.sql("""
+                                select count(*)
+                                from merchant_rich_menu_sync
+                                where tenant_id = :tenantId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
+
+        processLinePostback(tenant, "U-owner", "action=merchant_portal");
+        String portalReply = latestOutbox(tenant.id(), "U-owner", "REPLY");
+        assertThat(portalReply)
+                .contains("開啟完整管理後台")
+                .contains("/portal/#token=");
+        String portalToken = tokenFromPortalReply(portalReply);
+        MvcResult linePortalLogin = mvc.perform(post("/portal/api/line-session")
+                        .header("Authorization", "Bearer " + portalToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.authenticated").value(true))
+                .andReturn();
+        MockHttpSession linePortalSession =
+                (MockHttpSession) linePortalLogin.getRequest().getSession(false);
+        mvc.perform(get("/portal/api/overview").session(linePortalSession))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tenant.id").value(tenant.id()));
+        mvc.perform(post("/portal/api/line-session")
+                        .header("Authorization", "Bearer " + portalToken))
+                .andExpect(status().isUnauthorized());
 
         String staffId = jdbc.sql("""
                         select id from merchant_staff
@@ -228,6 +272,14 @@ class MerchantBookingManagementIntegrationTest {
         mvc.perform(post("/merchant-booking/api/{tenantSlug}/session", tenant.slug())
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isUnauthorized());
+        String portalOnlyToken = manageTokens.issuePortalLogin(tenant.id(), staffId);
+        mvc.perform(post("/merchant-booking/api/{tenantSlug}/session", tenant.slug())
+                        .header("Authorization", "Bearer " + portalOnlyToken))
+                .andExpect(status().isUnauthorized());
+        String bookingOnlyToken = manageTokens.issue(tenant.id(), staffId);
+        mvc.perform(post("/portal/api/line-session")
+                        .header("Authorization", "Bearer " + bookingOnlyToken))
+                .andExpect(status().isUnauthorized());
         mvc.perform(get("/merchant-booking/{tenantSlug}", tenant.slug()))
                 .andExpect(status().isOk())
                 .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
@@ -285,6 +337,29 @@ class MerchantBookingManagementIntegrationTest {
                         .query(Integer.class)
                         .single())
                 .isEqualTo(2);
+
+        mvc.perform(put("/portal/api/staff/{staffId}", staffId)
+                        .session(portal.session())
+                        .header("X-CSRF-Token", portal.csrfToken())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"status":"DISABLED"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("DISABLED"));
+        assertThat(jdbc.sql("""
+                                select desired_linked, status
+                                from merchant_rich_menu_sync
+                                where tenant_id = :tenantId
+                                  and staff_id = :staffId
+                                """)
+                        .param("tenantId", tenant.id())
+                        .param("staffId", staffId)
+                        .query((rs, rowNum) -> List.of(
+                                Boolean.toString(rs.getBoolean("desired_linked")),
+                                rs.getString("status")))
+                        .single())
+                .containsExactly("false", "READY");
     }
 
     private PortalSession loginPortal(Tenant tenant) throws Exception {
@@ -437,6 +512,13 @@ class MerchantBookingManagementIntegrationTest {
                 .param("deliveryType", deliveryType)
                 .query(String.class)
                 .single();
+    }
+
+    private String tokenFromPortalReply(String payload) {
+        Matcher matcher = Pattern.compile("/portal/#token=([^\"&]+)").matcher(payload);
+        assertThat(matcher.find()).isTrue();
+        return java.net.URLDecoder.decode(
+                matcher.group(1), java.nio.charset.StandardCharsets.UTF_8);
     }
 
     private void configureLineChannel(Tenant tenant) throws Exception {

@@ -1,17 +1,26 @@
 package com.lineaibot.line;
 
 import com.lineaibot.config.AppProperties;
+import java.io.IOException;
+import java.net.URI;
 import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
+import org.springframework.web.client.RestClientResponseException;
 import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 @Service
@@ -20,6 +29,7 @@ public class LineMessagingClient {
     private final LineRepository repository;
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
+    private final HttpClient httpClient;
     private final RestClient restClient;
 
     public LineMessagingClient(
@@ -30,8 +40,9 @@ public class LineMessagingClient {
         this.repository = repository;
         this.properties = properties;
         this.objectMapper = objectMapper;
-        var httpClient = HttpClient.newBuilder()
+        this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(20))
+                .version(HttpClient.Version.HTTP_1_1)
                 .build();
         var requestFactory = new JdkClientHttpRequestFactory(httpClient);
         requestFactory.setReadTimeout(Duration.ofSeconds(20));
@@ -103,6 +114,98 @@ public class LineMessagingClient {
                 messages,
                 toJson(messages),
                 dedupeKey);
+    }
+
+    public Optional<String> findRichMenuIdByName(
+            String channelAccessToken, String name) {
+        JsonNode response = restClient.get()
+                .uri(apiBaseUrl() + "/v2/bot/richmenu/list")
+                .header("Authorization", "Bearer " + channelAccessToken)
+                .retrieve()
+                .body(JsonNode.class);
+        if (response == null) {
+            return Optional.empty();
+        }
+        for (JsonNode menu : response.path("richmenus")) {
+            if (name.equals(menu.path("name").asText())) {
+                String id = menu.path("richMenuId").asText("");
+                if (!id.isBlank()) {
+                    return Optional.of(id);
+                }
+            }
+        }
+        return Optional.empty();
+    }
+
+    public String createRichMenu(
+            String channelAccessToken, Map<String, Object> definition) {
+        JsonNode response = restClient.post()
+                .uri(apiBaseUrl() + "/v2/bot/richmenu")
+                .contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + channelAccessToken)
+                .body(definition)
+                .retrieve()
+                .body(JsonNode.class);
+        String id = response == null ? "" : response.path("richMenuId").asText("");
+        if (id.isBlank()) {
+            throw new IllegalStateException("LINE rich menu creation returned no richMenuId");
+        }
+        return id;
+    }
+
+    public void uploadRichMenuImage(
+            String channelAccessToken, String richMenuId, byte[] png) {
+        var request = HttpRequest.newBuilder(URI.create(dataApiBaseUrl()
+                        + "/v2/bot/richmenu/"
+                        + richMenuId
+                        + "/content"))
+                .timeout(Duration.ofSeconds(20))
+                .header("Authorization", "Bearer " + channelAccessToken)
+                .header("Content-Type", MediaType.IMAGE_PNG_VALUE)
+                .POST(HttpRequest.BodyPublishers.ofByteArray(png))
+                .build();
+        try {
+            var response =
+                    httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new RestClientResponseException(
+                        "LINE rich menu image upload returned HTTP "
+                                + response.statusCode(),
+                        response.statusCode(),
+                        "",
+                        HttpHeaders.EMPTY,
+                        response.body(),
+                        StandardCharsets.UTF_8);
+            }
+        } catch (InterruptedException exception) {
+            Thread.currentThread().interrupt();
+            throw new RestClientException(
+                    "LINE rich menu image upload was interrupted", exception);
+        } catch (IOException exception) {
+            throw new RestClientException(
+                    "LINE rich menu image upload failed", exception);
+        }
+    }
+
+    public void linkRichMenu(
+            String channelAccessToken, String lineUserId, String richMenuId) {
+        restClient.post()
+                .uri(apiBaseUrl()
+                        + "/v2/bot/user/"
+                        + lineUserId
+                        + "/richmenu/"
+                        + richMenuId)
+                .header("Authorization", "Bearer " + channelAccessToken)
+                .retrieve()
+                .toBodilessEntity();
+    }
+
+    public void unlinkRichMenu(String channelAccessToken, String lineUserId) {
+        restClient.delete()
+                .uri(apiBaseUrl() + "/v2/bot/user/" + lineUserId + "/richmenu")
+                .header("Authorization", "Bearer " + channelAccessToken)
+                .retrieve()
+                .toBodilessEntity();
     }
 
     private void deliver(
@@ -189,5 +292,13 @@ public class LineMessagingClient {
         } catch (JacksonException exception) {
             throw new IllegalStateException("Unable to serialize LINE message", exception);
         }
+    }
+
+    private String apiBaseUrl() {
+        return properties.getLineApiBaseUrl().replaceAll("/+$", "");
+    }
+
+    private String dataApiBaseUrl() {
+        return properties.getLineApiDataBaseUrl().replaceAll("/+$", "");
     }
 }

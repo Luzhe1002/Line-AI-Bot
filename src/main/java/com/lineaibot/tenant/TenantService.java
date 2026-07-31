@@ -1,6 +1,7 @@
 package com.lineaibot.tenant;
 
 import com.lineaibot.config.AppProperties;
+import com.lineaibot.merchant.MerchantRichMenuService;
 import com.lineaibot.shared.ApiException;
 import com.lineaibot.shared.CryptoService;
 import com.lineaibot.tenant.TenantDtos.BookingServiceCreate;
@@ -31,12 +32,17 @@ public class TenantService {
             Set.of(15, 20, 30, 45, 60, 90, 120);
 
     private final TenantRepository repository;
+    private final MerchantRichMenuService richMenus;
     private final CryptoService crypto;
     private final AppProperties properties;
 
     public TenantService(
-            TenantRepository repository, CryptoService crypto, AppProperties properties) {
+            TenantRepository repository,
+            MerchantRichMenuService richMenus,
+            CryptoService crypto,
+            AppProperties properties) {
         this.repository = repository;
+        this.richMenus = richMenus;
         this.crypto = crypto;
         this.properties = properties;
     }
@@ -103,6 +109,7 @@ public class TenantService {
                         properties.getEncryptionKey(), request.channelAccessToken()),
                 enabled,
                 Instant.now());
+        richMenus.scheduleTenant(tenant.id());
         return lineChannelView(tenant, true, enabled);
     }
 

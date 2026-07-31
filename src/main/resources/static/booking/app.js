@@ -5,18 +5,40 @@
   const tokenFromLink = fragment.get("token");
   if (tokenFromLink) {
     sessionStorage.setItem(`booking-token:${tenantSlug}`, tokenFromLink);
-    history.replaceState(null, "", location.pathname);
+    history.replaceState(null, "", `${location.pathname}${location.search}`);
   }
   const token = sessionStorage.getItem(`booking-token:${tenantSlug}`);
   const state = { bootstrap: null, service: null, date: "", slot: null };
   const steps = [...document.querySelectorAll(".step")];
   const progress = [...document.querySelectorAll(".progress span")];
+  const progressElement = document.querySelector(".progress");
   const notice = document.querySelector("#notice");
+  const slotRequests = UiUtils.createLatestRequestGate();
 
-  function showStep(index) {
-    steps.forEach((step, position) => step.classList.toggle("active", position === index));
+  function showNotice(message, error = false) {
+    notice.textContent = message;
+    notice.setAttribute("role", error ? "alert" : "status");
+    notice.setAttribute("aria-live", error ? "assertive" : "polite");
+  }
+
+  function renderMessage(container, message) {
+    const paragraph = document.createElement("p");
+    paragraph.className = "empty";
+    paragraph.textContent = message;
+    container.replaceChildren(paragraph);
+  }
+
+  function showStep(index, { focus = true } = {}) {
+    steps.forEach((step, position) => {
+      const active = position === index;
+      step.classList.toggle("active", active);
+      step.hidden = !active;
+    });
     progress.forEach((bar, position) => bar.classList.toggle("active", position <= index));
-    notice.textContent = "";
+    progressElement.setAttribute("aria-valuenow", String(index + 1));
+    progressElement.setAttribute("aria-valuetext", `步驟 ${index + 1}，共 ${steps.length} 步`);
+    showNotice("");
+    if (focus) steps[index].querySelector("h2")?.focus({ preventScroll: true });
   }
 
   async function api(path, options = {}) {
@@ -51,12 +73,17 @@
 
   async function loadSlots() {
     const container = document.querySelector("#slots");
-    container.innerHTML = '<p class="empty">正在查詢可預約時段…</p>';
+    const requestId = slotRequests.begin();
+    const requestedDate = state.date;
+    const serviceId = state.service.id;
+    container.setAttribute("aria-busy", "true");
+    renderMessage(container, "正在查詢可預約時段…");
     try {
-      const result = await api(`/availability?service_id=${encodeURIComponent(state.service.id)}&local_date=${state.date}`);
-      container.innerHTML = "";
+      const result = await api(`/availability?service_id=${encodeURIComponent(serviceId)}&local_date=${requestedDate}`);
+      if (!slotRequests.isLatest(requestId) || state.date !== requestedDate || state.service.id !== serviceId) return;
+      container.replaceChildren();
       if (!result.slots.length) {
-        container.innerHTML = '<p class="empty">這天目前沒有可預約時段，請選擇其他日期。</p>';
+        renderMessage(container, "這天目前沒有可預約時段，請選擇其他日期。");
         return;
       }
       result.slots.forEach(slot => {
@@ -68,7 +95,9 @@
         container.appendChild(button);
       });
     } catch (error) {
-      container.innerHTML = `<p class="empty">${error.message}</p>`;
+      if (slotRequests.isLatest(requestId)) renderMessage(container, error.message);
+    } finally {
+      if (slotRequests.isLatest(requestId)) container.setAttribute("aria-busy", "false");
     }
   }
 
@@ -82,15 +111,19 @@
   }
 
   async function confirmBooking() {
-    const name = document.querySelector("#customer-name").value.trim();
+    const nameInput = document.querySelector("#customer-name");
+    const name = nameInput.value.trim();
     if (!name) {
-      notice.textContent = "請輸入預約姓名。";
+      nameInput.setAttribute("aria-invalid", "true");
+      showNotice("請輸入預約姓名。", true);
+      nameInput.focus();
       return;
     }
+    nameInput.removeAttribute("aria-invalid");
     const button = document.querySelector("#confirm");
     button.disabled = true;
     button.textContent = "正在確認時段…";
-    notice.textContent = "";
+    showNotice("");
     try {
       const reservation = await api("/reservations", {
         method: "POST",
@@ -107,10 +140,10 @@
     } catch (error) {
       if (error.status === 409) {
         showStep(1);
-        notice.textContent = "這個時段剛被預約，已為你重新載入當天可用時段。";
+        showNotice("這個時段剛被預約，已為你重新載入當天可用時段。", true);
         await loadSlots();
       } else {
-        notice.textContent = error.message;
+        showNotice(error.message, true);
       }
     } finally {
       button.disabled = false;
@@ -125,7 +158,7 @@
     document.title = `${state.bootstrap.tenant_name}｜預約`;
     const services = document.querySelector("#services");
     if (!state.bootstrap.services.length) {
-      services.innerHTML = '<p class="empty">商家目前沒有開放預約服務。</p>';
+      renderMessage(services, "商家目前沒有開放預約服務。");
       return;
     }
     state.bootstrap.services.forEach(service => {
@@ -146,8 +179,9 @@
         dateInput.min = today;
         dateInput.value = today;
         state.date = today;
+        state.slot = null;
         showStep(1);
-        loadSlots();
+        void loadSlots();
       });
       services.appendChild(button);
     });
@@ -155,18 +189,36 @@
 
   document.querySelector("#booking-date").addEventListener("change", event => {
     state.date = event.target.value;
-    if (state.date) loadSlots();
+    state.slot = null;
+    if (state.date) void loadSlots();
+    else {
+      slotRequests.invalidate();
+      renderMessage(document.querySelector("#slots"), "請先選擇日期。");
+    }
   });
   document.querySelectorAll(".back").forEach(button =>
     button.addEventListener("click", () => showStep(Number(button.dataset.back))));
   document.querySelector("#confirm").addEventListener("click", confirmBooking);
+  document.querySelector("#customer-name").addEventListener("input", (event) => {
+    if (event.currentTarget.value.trim()) {
+      event.currentTarget.removeAttribute("aria-invalid");
+      if (notice.textContent === "請輸入預約姓名。") showNotice("");
+    }
+  });
 
   start().catch(error => {
-    document.querySelectorAll("header, .step").forEach(element => element.hidden = true);
-    document.querySelector("#fatal-error").hidden = false;
+    slotRequests.invalidate();
+    document.querySelector("header").hidden = true;
+    steps.forEach((step) => {
+      step.classList.remove("active");
+      step.hidden = true;
+    });
+    const fatalError = document.querySelector("#fatal-error");
+    fatalError.hidden = false;
     document.querySelector("#fatal-message").textContent =
       error.message === "連結缺少預約憑證"
         ? "預約連結不完整，請回到 LINE 重新輸入「預約」。"
         : "預約連結可能已失效，請回到 LINE 重新輸入「預約」。";
+    fatalError.querySelector("h2").focus({ preventScroll: true });
   });
 })();

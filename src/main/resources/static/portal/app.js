@@ -38,6 +38,8 @@ function toast(message, error = false) {
   const element = $("#toast");
   element.textContent = message;
   element.className = `toast show${error ? " error" : ""}`;
+  element.setAttribute("role", error ? "alert" : "status");
+  element.setAttribute("aria-live", error ? "assertive" : "polite");
   clearTimeout(toast.timer);
   toast.timer = setTimeout(() => { element.className = "toast"; }, 3200);
 }
@@ -70,6 +72,28 @@ async function restoreSession() {
     }
   } catch (_) {
     showAuth();
+  }
+}
+
+async function exchangeLineOwnerToken() {
+  const fragment = new URLSearchParams(window.location.hash.slice(1));
+  const token = fragment.get("token");
+  if (!token) return false;
+  window.history.replaceState(null, "", `${window.location.pathname}${window.location.search}`);
+  try {
+    const session = await api("/line-session", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    state.csrfToken = session.csrf_token;
+    state.tenant = session.tenant;
+    await enterApp();
+    toast("已透過店家擁有者 LINE 安全登入");
+    return true;
+  } catch (error) {
+    showAuth();
+    toast(error.message, true);
+    return false;
   }
 }
 
@@ -267,7 +291,12 @@ function switchView(name) {
   state.activeView = name;
   $$(".view").forEach((view) => view.classList.add("hidden"));
   $(`#view-${name}`).classList.remove("hidden");
-  $$(".nav-item").forEach((item) => item.classList.toggle("active", item.dataset.view === name));
+  $$(".nav-item").forEach((item) => {
+    const active = item.dataset.view === name;
+    item.classList.toggle("active", active);
+    if (active) item.setAttribute("aria-current", "page");
+    else item.removeAttribute("aria-current");
+  });
   const titles = {
     overview: ["MERCHANT OVERVIEW", "今天，讓客服再可靠一點。"],
     knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。"],
@@ -277,6 +306,7 @@ function switchView(name) {
   };
   $("#page-eyebrow").textContent = titles[name][0];
   $("#page-title").textContent = titles[name][1];
+  $("#page-title").focus({ preventScroll: true });
 }
 
 function escapeHtml(value = "") {
@@ -285,11 +315,29 @@ function escapeHtml(value = "") {
   })[char]);
 }
 
-$$("[data-auth-tab]").forEach((button) => button.addEventListener("click", () => {
-  $$("[data-auth-tab]").forEach((item) => item.classList.toggle("active", item === button));
+const authTabs = $$("[data-auth-tab]");
+
+function activateAuthTab(button) {
+  authTabs.forEach((item) => {
+    const active = item === button;
+    item.classList.toggle("active", active);
+    item.setAttribute("aria-selected", String(active));
+    item.tabIndex = active ? 0 : -1;
+  });
   $("#login-form").classList.toggle("hidden", button.dataset.authTab !== "login");
   $("#onboard-form").classList.toggle("hidden", button.dataset.authTab !== "onboard");
-}));
+}
+
+authTabs.forEach((button, index) => {
+  button.addEventListener("click", () => activateAuthTab(button));
+  button.addEventListener("keydown", (event) => {
+    const targetIndex = UiUtils.tabIndexForKey(index, event.key, authTabs.length);
+    if (targetIndex === index || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+    event.preventDefault();
+    authTabs[targetIndex].focus();
+    activateAuthTab(authTabs[targetIndex]);
+  });
+});
 
 $("#login-form").addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -588,4 +636,8 @@ $("#copy-webhook").addEventListener("click", async () => {
   } catch (_) { toast("無法存取剪貼簿，請手動複製", true); }
 });
 
-restoreSession();
+async function initialize() {
+  if (!(await exchangeLineOwnerToken())) await restoreSession();
+}
+
+initialize();

@@ -73,6 +73,8 @@ public class MerchantLineService {
                     Optional.of(agendaMessages(tenant, staff.get(), "week"));
             case "管理預約", "預約管理", "店家管理" ->
                     Optional.of(managementMenu(tenant, staff.get()));
+            case "管理後台", "店家後台", "完整後台" ->
+                    Optional.of(portalLogin(tenant, staff.get()));
             default -> Optional.empty();
         };
     }
@@ -102,6 +104,7 @@ public class MerchantLineService {
                             staff.get(),
                             require(values, "reservation_id"));
             case "merchant_menu" -> managementMenu(tenant, staff.get());
+            case "merchant_portal" -> portalLogin(tenant, staff.get());
             default -> List.of(textMessage("無法辨識這個店家管理操作。"));
         });
     }
@@ -132,6 +135,20 @@ public class MerchantLineService {
                                         "range", "week"))),
                         uriItem("開啟預約月曆", manageUrl))));
         return List.of(message);
+    }
+
+    private List<Map<String, Object>> portalLogin(
+            TenantRow tenant, MerchantDtos.StaffView staff) {
+        if (!"OWNER".equals(staff.role())) {
+            return List.of(textMessage("只有店家擁有者可以進入完整管理後台。"));
+        }
+        String token = manageTokens.issuePortalLogin(tenant.id(), staff.id());
+        String portalUrl = properties.getPublicBaseUrl().replaceAll("/+$", "")
+                + "/portal/#token="
+                + URLEncoder.encode(token, StandardCharsets.UTF_8);
+        return List.of(withQuickReply(
+                "已確認你的店家擁有者身分。管理連結十分鐘內有效，且只能使用一次。",
+                List.of(uriItem("開啟完整管理後台", portalUrl))));
     }
 
     private List<Map<String, Object>> agendaMessages(

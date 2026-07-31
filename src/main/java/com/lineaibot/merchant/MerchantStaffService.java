@@ -29,14 +29,17 @@ public class MerchantStaffService {
     private static final long LINK_TTL_MINUTES = 10;
 
     private final MerchantRepository repository;
+    private final MerchantRichMenuService richMenus;
     private final CryptoService crypto;
     private final AppProperties properties;
 
     public MerchantStaffService(
             MerchantRepository repository,
+            MerchantRichMenuService richMenus,
             CryptoService crypto,
             AppProperties properties) {
         this.repository = repository;
+        this.richMenus = richMenus;
         this.crypto = crypto;
         this.properties = properties;
     }
@@ -96,6 +99,7 @@ public class MerchantStaffService {
         if (!repository.consumeStaffLink(link.id(), now)) {
             throw new ApiException(HttpStatus.CONFLICT, "綁定碼已被使用");
         }
+        richMenus.scheduleStaff(staff);
         return staff;
     }
 
@@ -139,7 +143,7 @@ public class MerchantStaffService {
             throw new ApiException(
                     HttpStatus.CONFLICT, "At least one active owner is required");
         }
-        return repository.updateStaff(
+        StaffView updated = repository.updateStaff(
                 tenantId,
                 staffId,
                 displayName,
@@ -158,6 +162,8 @@ public class MerchantStaffService {
                         ? current.dailySummaryTime()
                         : request.dailySummaryTime(),
                 Instant.now());
+        richMenus.scheduleStaff(updated);
+        return updated;
     }
 
     public boolean canMutateBookings(StaffView staff) {

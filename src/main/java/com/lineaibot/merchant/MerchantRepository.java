@@ -33,6 +33,7 @@ public class MerchantRepository {
             String id,
             String tenantId,
             String staffId,
+            String purpose,
             Instant expiresAt,
             Instant consumedAt) {}
 
@@ -251,14 +252,15 @@ public class MerchantRepository {
             String tenantId,
             String staffId,
             String tokenHash,
+            String purpose,
             Instant expiresAt,
             Instant createdAt) {
         jdbc.sql("""
                         insert into merchant_manage_tokens (
-                            id, tenant_id, staff_id, token_hash,
+                            id, tenant_id, staff_id, token_hash, purpose,
                             expires_at, consumed_at, created_at
                         ) values (
-                            :id, :tenantId, :staffId, :tokenHash,
+                            :id, :tenantId, :staffId, :tokenHash, :purpose,
                             :expiresAt, null, :createdAt
                         )
                         """)
@@ -266,24 +268,29 @@ public class MerchantRepository {
                 .param("tenantId", tenantId)
                 .param("staffId", staffId)
                 .param("tokenHash", tokenHash)
+                .param("purpose", purpose)
                 .param("expiresAt", utc(expiresAt))
                 .param("createdAt", utc(createdAt))
                 .update();
     }
 
-    public Optional<ManageTokenRow> findUsableManageToken(String tokenHash, Instant now) {
+    public Optional<ManageTokenRow> findUsableManageToken(
+            String tokenHash, String purpose, Instant now) {
         return jdbc.sql("""
                         select * from merchant_manage_tokens
                         where token_hash = :tokenHash
+                          and purpose = :purpose
                           and consumed_at is null
                           and expires_at >= :now
                         """)
                 .param("tokenHash", tokenHash)
+                .param("purpose", purpose)
                 .param("now", utc(now))
                 .query((rs, rowNum) -> new ManageTokenRow(
                         rs.getString("id"),
                         rs.getString("tenant_id"),
                         rs.getString("staff_id"),
+                        rs.getString("purpose"),
                         instant(rs, "expires_at"),
                         nullableInstant(rs, "consumed_at")))
                 .optional();

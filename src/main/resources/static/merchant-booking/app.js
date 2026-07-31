@@ -12,6 +12,8 @@
   };
 
   const $ = (selector) => document.querySelector(selector);
+  const agendaRequests = UiUtils.createLatestRequestGate();
+  const blockSlotRequests = UiUtils.createLatestRequestGate();
 
   async function api(path, options = {}) {
     const headers = { ...(options.headers || {}) };
@@ -30,7 +32,9 @@
         const error = await response.json();
         message = error.detail || message;
       } catch (_) {}
-      throw new Error(message);
+      const error = new Error(message);
+      error.status = response.status;
+      throw error;
     }
     if (response.status === 204 || response.headers.get("content-length") === "0") return null;
     return response.json();
@@ -40,8 +44,17 @@
     const element = $("#toast");
     element.textContent = message;
     element.className = `toast show${error ? " error" : ""}`;
+    element.setAttribute("role", error ? "alert" : "status");
+    element.setAttribute("aria-live", error ? "assertive" : "polite");
     clearTimeout(toast.timer);
     toast.timer = setTimeout(() => { element.className = "toast"; }, 3000);
+  }
+
+  function setAgendaLoading(loading) {
+    ["#previous-day", "#next-day", "#today-button", "#agenda-date", "#refresh-button"]
+      .forEach((selector) => { $(selector).disabled = loading; });
+    $("#refresh-button").textContent = loading ? "更新中…" : "重新整理";
+    $("#app-content").setAttribute("aria-busy", String(loading));
   }
 
   function localToday() {
@@ -97,20 +110,35 @@
     state.csrfToken = session.csrf_token;
   }
 
-  async function loadAgenda() {
+  async function loadAgenda({ throwOnError = false } = {}) {
     const date = $("#agenda-date").value;
+    if (!date) return false;
     const next = addDays(date, 1);
-    state.agenda = await api(`/agenda/local?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(next)}`);
-    renderAgenda();
+    const requestId = agendaRequests.begin();
+    setAgendaLoading(true);
+    try {
+      const agenda = await api(`/agenda/local?from_date=${encodeURIComponent(date)}&to_date=${encodeURIComponent(next)}`);
+      if (!agendaRequests.isLatest(requestId)) return false;
+      state.agenda = agenda;
+      renderAgenda(date);
+      return true;
+    } catch (error) {
+      if (!agendaRequests.isLatest(requestId)) return false;
+      if (throwOnError) throw error;
+      toast(UiUtils.withRecoveryMessage(error.message, "請稍後再試。"), true);
+      return false;
+    } finally {
+      if (agendaRequests.isLatest(requestId)) setAgendaLoading(false);
+    }
   }
 
-  function renderAgenda() {
+  function renderAgenda(date) {
     const reservations = state.agenda.reservations || [];
     const blocks = (state.agenda.blocks || []).filter((item) => item.active);
     $("#confirmed-count").textContent = reservations.filter((item) => item.status === "CONFIRMED").length;
     $("#cancelled-count").textContent = reservations.filter((item) => item.status === "CANCELLED").length;
     $("#blocked-count").textContent = blocks.length;
-    $("#agenda-title").textContent = `${$("#agenda-date").value} 預約`;
+    $("#agenda-title").textContent = `${date} 預約`;
 
     const canWrite = ["OWNER", "MANAGER"].includes(state.bootstrap.staff.role);
     $("#reservation-list").innerHTML = reservations.length
@@ -147,19 +175,28 @@
     const service = state.bootstrap.services[0];
     const select = $("#block-slot");
     if (!date || !service) {
+      blockSlotRequests.invalidate();
       select.innerHTML = '<option value="">沒有可用服務</option>';
       return;
     }
+    const requestId = blockSlotRequests.begin();
+    select.disabled = true;
+    select.innerHTML = '<option value="">讀取中…</option>';
     try {
       const result = await api(`/availability?service_id=${encodeURIComponent(service.id)}&local_date=${encodeURIComponent(date)}`);
+      if (!blockSlotRequests.isLatest(requestId) || $("#block-date").value !== date) return;
       select.innerHTML = result.slots.length
         ? '<option value="">請選擇</option>' + result.slots.map((slot) =>
           `<option value="${slot.starts_at}">${escapeHtml(timeOnly(slot.starts_at))}</option>`
         ).join("")
         : '<option value="">沒有可封鎖時段</option>';
     } catch (error) {
-      select.innerHTML = '<option value="">讀取失敗</option>';
-      toast(error.message, true);
+      if (blockSlotRequests.isLatest(requestId)) {
+        select.innerHTML = '<option value="">讀取失敗</option>';
+        toast(UiUtils.withRecoveryMessage(error.message, "請稍後再試。"), true);
+      }
+    } finally {
+      if (blockSlotRequests.isLatest(requestId)) select.disabled = false;
     }
   }
 
@@ -169,32 +206,35 @@
     state.bootstrap = await api("/bootstrap");
     $("#tenant-name").textContent = state.bootstrap.tenant_name;
     $("#staff-name").textContent = `${state.bootstrap.staff.display_name} · 店家預約管理`;
-    $("#role-badge").textContent = state.bootstrap.staff.role;
+    $("#role-badge").textContent = UiUtils.roleLabel(state.bootstrap.staff.role);
     document.title = `${state.bootstrap.tenant_name}｜預約管理`;
     const today = localToday();
     $("#agenda-date").value = today;
     $("#block-date").value = today;
     const canWrite = ["OWNER", "MANAGER"].includes(state.bootstrap.staff.role);
     $("#block-section").classList.toggle("hidden", !canWrite);
+    await Promise.all([
+      loadAgenda({ throwOnError: true }),
+      canWrite ? loadBlockSlots() : Promise.resolve(),
+    ]);
     $("#app-content").classList.remove("hidden");
-    await Promise.all([loadAgenda(), canWrite ? loadBlockSlots() : Promise.resolve()]);
   }
 
-  $("#previous-day").addEventListener("click", async () => {
+  $("#previous-day").addEventListener("click", () => {
     $("#agenda-date").value = addDays($("#agenda-date").value, -1);
-    await loadAgenda();
+    void loadAgenda();
   });
-  $("#next-day").addEventListener("click", async () => {
+  $("#next-day").addEventListener("click", () => {
     $("#agenda-date").value = addDays($("#agenda-date").value, 1);
-    await loadAgenda();
+    void loadAgenda();
   });
-  $("#today-button").addEventListener("click", async () => {
+  $("#today-button").addEventListener("click", () => {
     $("#agenda-date").value = localToday();
-    await loadAgenda();
+    void loadAgenda();
   });
-  $("#agenda-date").addEventListener("change", loadAgenda);
-  $("#refresh-button").addEventListener("click", loadAgenda);
-  $("#block-date").addEventListener("change", loadBlockSlots);
+  $("#agenda-date").addEventListener("change", () => { void loadAgenda(); });
+  $("#refresh-button").addEventListener("click", () => { void loadAgenda(); });
+  $("#block-date").addEventListener("change", () => { void loadBlockSlots(); });
 
   $("#reservation-list").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-cancel-id]");
@@ -249,7 +289,15 @@
   });
 
   start().catch((error) => {
-    $("#error-message").textContent = error.message;
+    agendaRequests.invalidate();
+    blockSlotRequests.invalidate();
+    $(".topbar").classList.add("hidden");
+    $("#app-content").classList.add("hidden");
+    $("#error-message").textContent = UiUtils.withRecoveryMessage(
+      error.message,
+      "請回到 LINE，重新點擊「開啟預約月曆」。",
+    );
     $("#error-panel").classList.remove("hidden");
+    $("#error-panel h2").focus({ preventScroll: true });
   });
 })();

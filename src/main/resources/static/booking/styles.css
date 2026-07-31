@@ -12,17 +12,19 @@
 body {
   margin: 0;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f6f8f6;
   color: var(--ink);
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
 }
 button, input { font: inherit; }
-button { cursor: pointer; }
+button { cursor: pointer; touch-action: manipulation; }
 .booking-shell {
   width: min(100%, 480px);
   min-height: 100vh;
+  min-height: 100dvh;
   margin: 0 auto;
-  padding: 24px 20px 44px;
+  padding: 24px 20px calc(44px + env(safe-area-inset-bottom));
   background: var(--surface);
 }
 .eyebrow, .step-label, .muted { color: var(--muted); }
@@ -34,9 +36,11 @@ h2 { margin: 0 0 18px; font-size: 23px; }
 .progress span.active { background: var(--green); }
 .step { display: none; }
 .step.active { display: block; }
+.step[hidden] { display: none !important; }
 .choice-list { display: grid; gap: 12px; }
 .service, .slot, .primary, .secondary {
   width: 100%;
+  min-height: 44px;
   border-radius: 14px;
   padding: 14px 16px;
   border: 1px solid var(--line);
@@ -74,4 +78,13 @@ input:focus, button:focus-visible { outline: 3px solid rgba(22,107,75,.2); outli
 .notice { min-height: 24px; margin-top: 14px; color: var(--danger); font-size: 14px; }
 @media (max-width: 360px) {
   .slot-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    transition-duration: .01ms !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }
