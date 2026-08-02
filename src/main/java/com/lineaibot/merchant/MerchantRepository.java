@@ -223,6 +223,19 @@ public class MerchantRepository {
                 .list();
     }
 
+    public List<StaffSecretRow> listActiveStaffSecrets(String tenantId) {
+        return jdbc.sql("""
+                        select * from merchant_staff
+                        where tenant_id = :tenantId
+                          and status = 'ACTIVE'
+                        order by created_at
+                        """)
+                .param("tenantId", tenantId)
+                .query((rs, rowNum) -> new StaffSecretRow(
+                        mapStaff(rs, rowNum), rs.getString("line_user_id_encrypted")))
+                .list();
+    }
+
     public StaffView updateStaff(
             String tenantId,
             String staffId,
