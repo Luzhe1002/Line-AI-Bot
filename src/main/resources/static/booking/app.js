@@ -187,7 +187,8 @@
     });
   }
 
-  document.querySelector("#booking-date").addEventListener("change", event => {
+  function updateBookingDate(event) {
+    if (event.target.value === state.date) return;
     state.date = event.target.value;
     state.slot = null;
     if (state.date) void loadSlots();
@@ -195,7 +196,11 @@
       slotRequests.invalidate();
       renderMessage(document.querySelector("#slots"), "請先選擇日期。");
     }
-  });
+  }
+
+  const bookingDate = document.querySelector("#booking-date");
+  bookingDate.addEventListener("input", updateBookingDate);
+  bookingDate.addEventListener("change", updateBookingDate);
   document.querySelectorAll(".back").forEach(button =>
     button.addEventListener("click", () => showStep(Number(button.dataset.back))));
   document.querySelector("#confirm").addEventListener("click", confirmBooking);

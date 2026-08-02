@@ -182,21 +182,23 @@ public class LineRepository {
                 .update();
     }
 
-    public boolean hasOpenHandoff(String tenantId, String lineUserId) {
+    public Optional<String> findOpenHandoffId(String tenantId, String lineUserId) {
         return jdbc.sql("""
-                        select count(*) from handoff_tickets
+                        select id from handoff_tickets
                         where tenant_id = :tenantId and line_user_id = :lineUserId
                           and status = 'OPEN'
+                        order by created_at
+                        limit 1
                         """)
                         .param("tenantId", tenantId)
                         .param("lineUserId", lineUserId)
-                        .query(Integer.class)
-                        .single()
-                > 0;
+                        .query(String.class)
+                        .optional();
     }
 
-    public void insertHandoff(
+    public String insertHandoff(
             String tenantId, String lineUserId, String reason, Instant createdAt) {
+        String id = UUID.randomUUID().toString();
         jdbc.sql("""
                         insert into handoff_tickets (
                             id, tenant_id, line_user_id, status, reason, created_at, closed_at
@@ -204,12 +206,13 @@ public class LineRepository {
                             :id, :tenantId, :lineUserId, 'OPEN', :reason, :createdAt, null
                         )
                         """)
-                .param("id", UUID.randomUUID().toString())
+                .param("id", id)
                 .param("tenantId", tenantId)
                 .param("lineUserId", lineUserId)
                 .param("reason", reason)
                 .param("createdAt", utc(createdAt))
                 .update();
+        return id;
     }
 
     public String insertOutbox(

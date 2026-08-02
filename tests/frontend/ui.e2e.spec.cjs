@@ -85,6 +85,23 @@ test("customer booking hides inactive steps on fatal errors and renders API text
   await expect(page.locator("#slots strong")).toHaveCount(0);
 });
 
+test("customer booking reloads slots when LINE WebView emits only an input event", async ({ page }) => {
+  await page.goto("/booking/demo/#token=e2e-token");
+  await page.locator(".service").click();
+
+  const availabilityRequest = page.waitForRequest((request) =>
+    request.url().includes("/availability?")
+      && request.url().includes("local_date=2099-12-30")
+  );
+  await page.locator("#booking-date").evaluate((element) => {
+    element.value = "2099-12-30";
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+
+  await availabilityRequest;
+  await expect(page.locator(".slot")).toHaveCount(1);
+});
+
 test("merchant agenda shows loading/error feedback and localized role", async ({ page }) => {
   await page.goto("/merchant-booking/demo/#token=e2e-token");
   await expect(page.locator("#tenant-name")).toHaveText("測試店家");
