@@ -115,6 +115,23 @@ class MerchantBookingManagementIntegrationTest {
         assertThat(latestOutbox(tenant.id(), "U-owner", "REPLY"))
                 .contains("管理員綁定成功")
                 .contains("管理預約");
+
+        processLineText(tenant, "U-handoff-customer", "人工客服");
+        assertThat(latestOutbox(tenant.id(), "U-owner", "PUSH"))
+                .contains("顧客要求轉接人工客服")
+                .contains("案件編號");
+        processLineText(tenant, "U-handoff-customer", "人工客服");
+        assertThat(jdbc.sql("""
+                                select count(*) from outbox_messages
+                                where tenant_id = :tenantId
+                                  and line_user_id = 'U-owner'
+                                  and delivery_type = 'PUSH'
+                                  and dedupe_key like 'handoff:%'
+                                """)
+                        .param("tenantId", tenant.id())
+                        .query(Integer.class)
+                        .single())
+                .isEqualTo(1);
         assertThat(jdbc.sql("""
                                 select desired_role, desired_linked, status
                                 from merchant_rich_menu_sync

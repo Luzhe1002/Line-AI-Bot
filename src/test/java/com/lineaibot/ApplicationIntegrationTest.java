@@ -441,6 +441,15 @@ class ApplicationIntegrationTest {
                 .andExpect(jsonPath("$.tenant_slug").value(tenant.slug()))
                 .andExpect(jsonPath("$.services[0].id").value(serviceId));
 
+        LocalDate slotDate = slot.atZone(ZoneId.of("Asia/Taipei")).toLocalDate();
+        mvc.perform(get("/booking/api/{tenantSlug}/availability", tenant.slug())
+                        .header("Authorization", authorization)
+                        .queryParam("service_id", serviceId)
+                        .queryParam("local_date", slotDate.toString()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.local_date").value(slotDate.toString()))
+                .andExpect(jsonPath("$.slots").isNotEmpty());
+
         mvc.perform(post("/booking/api/{tenantSlug}/reservations", tenant.slug())
                         .header("Authorization", authorization)
                         .contentType(MediaType.APPLICATION_JSON)

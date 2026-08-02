@@ -33,6 +33,7 @@ public class ConversationService {
     private final LineRepository repository;
     private final ObjectMapper objectMapper;
     private final BookingAccessTokenService bookingAccessTokens;
+    private final HandoffNotificationService handoffNotifications;
     private final AppProperties properties;
 
     public ConversationService(
@@ -43,6 +44,7 @@ public class ConversationService {
             LineRepository repository,
             ObjectMapper objectMapper,
             BookingAccessTokenService bookingAccessTokens,
+            HandoffNotificationService handoffNotifications,
             AppProperties properties) {
         this.classifier = classifier;
         this.bookings = bookings;
@@ -51,6 +53,7 @@ public class ConversationService {
         this.repository = repository;
         this.objectMapper = objectMapper;
         this.bookingAccessTokens = bookingAccessTokens;
+        this.handoffNotifications = handoffNotifications;
         this.properties = properties;
     }
 
@@ -173,9 +176,10 @@ public class ConversationService {
 
     private List<Map<String, Object>> createHandoff(
             TenantRow tenant, String lineUserId, String reason) {
-        if (!repository.hasOpenHandoff(tenant.id(), lineUserId)) {
-            repository.insertHandoff(tenant.id(), lineUserId, reason, Instant.now());
-        }
+        String ticketId = repository.findOpenHandoffId(tenant.id(), lineUserId)
+                .orElseGet(() -> repository.insertHandoff(
+                        tenant.id(), lineUserId, reason, Instant.now()));
+        handoffNotifications.notifyMerchant(tenant, ticketId);
         return List.of(textMessage("已通知人工客服，服務人員會儘快回覆您。"));
     }
 
