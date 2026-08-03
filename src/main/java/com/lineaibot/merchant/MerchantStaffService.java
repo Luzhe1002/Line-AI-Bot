@@ -80,21 +80,34 @@ public class MerchantStaffService {
         var link = repository.findUsableStaffLink(tenantId, linkHash(normalizedCode), now)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.UNAUTHORIZED, "綁定碼無效、已使用或已過期"));
-        if (repository.findActiveStaffByLineKey(tenantId, lineUserKey(lineUserId)).isPresent()) {
+        String lookupKey = lineUserKey(lineUserId);
+        var existing = repository.findStaffByLineKey(tenantId, lookupKey);
+        if (existing.filter(staff -> "ACTIVE".equals(staff.status())).isPresent()) {
             throw new ApiException(HttpStatus.CONFLICT, "這個 LINE 已經綁定店家管理權限");
         }
         StaffView staff;
-        try {
-            staff = repository.insertStaff(
-                    UUID.randomUUID().toString(),
+        if (existing.isPresent()) {
+            staff = repository.reactivateStaff(
                     tenantId,
-                    lineUserKey(lineUserId),
+                    existing.get().id(),
                     encryptLineUserId(lineUserId),
                     link.displayName(),
                     link.role(),
                     now);
-        } catch (DataIntegrityViolationException exception) {
-            throw new ApiException(HttpStatus.CONFLICT, "這個 LINE 已經綁定店家管理權限");
+        } else {
+            try {
+                staff = repository.insertStaff(
+                        UUID.randomUUID().toString(),
+                        tenantId,
+                        lookupKey,
+                        encryptLineUserId(lineUserId),
+                        link.displayName(),
+                        link.role(),
+                        now);
+            } catch (DataIntegrityViolationException exception) {
+                throw new ApiException(
+                        HttpStatus.CONFLICT, "這個 LINE 已經綁定店家管理權限");
+            }
         }
         if (!repository.consumeStaffLink(link.id(), now)) {
             throw new ApiException(HttpStatus.CONFLICT, "綁定碼已被使用");
@@ -164,6 +177,21 @@ public class MerchantStaffService {
                 Instant.now());
         richMenus.scheduleStaff(updated);
         return updated;
+    }
+
+    @Transactional
+    public void remove(String tenantId, String staffId) {
+        StaffView current = repository.findStaff(tenantId, staffId)
+                .filter(staff -> "ACTIVE".equals(staff.status()))
+                .orElseThrow(() -> new ApiException(
+                        HttpStatus.NOT_FOUND, "找不到這位已綁定人員"));
+        if ("OWNER".equals(current.role())
+                && repository.countActiveOwners(tenantId) <= 1) {
+            throw new ApiException(
+                    HttpStatus.CONFLICT, "至少需要保留一位擁有者");
+        }
+        StaffView removed = repository.disableStaff(tenantId, staffId, Instant.now());
+        richMenus.scheduleStaff(removed);
     }
 
     public boolean canMutateBookings(StaffView staff) {

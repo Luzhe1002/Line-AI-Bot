@@ -26,6 +26,10 @@ import tools.jackson.databind.ObjectMapper;
 @Service
 public class LineMessagingClient {
 
+    private static final int MAX_ERROR_BODY_LENGTH = 500;
+    private static final String IMAGE_ALREADY_UPLOADED =
+            "An image has already been uploaded to the richmenu";
+
     private final LineRepository repository;
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
@@ -168,9 +172,15 @@ public class LineMessagingClient {
             var response =
                     httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                String responseBody = sanitizeErrorBody(response.body());
+                if (response.statusCode() == 400
+                        && responseBody.contains(IMAGE_ALREADY_UPLOADED)) {
+                    return;
+                }
                 throw new RestClientResponseException(
                         "LINE rich menu image upload returned HTTP "
-                                + response.statusCode(),
+                                + response.statusCode()
+                                + (responseBody.isBlank() ? "" : ": " + responseBody),
                         response.statusCode(),
                         "",
                         HttpHeaders.EMPTY,
@@ -185,6 +195,18 @@ public class LineMessagingClient {
             throw new RestClientException(
                     "LINE rich menu image upload failed", exception);
         }
+    }
+
+    private String sanitizeErrorBody(byte[] body) {
+        if (body == null || body.length == 0) {
+            return "";
+        }
+        String text = new String(body, StandardCharsets.UTF_8)
+                .replaceAll("[\\r\\n\\t]+", " ")
+                .trim();
+        return text.length() <= MAX_ERROR_BODY_LENGTH
+                ? text
+                : text.substring(0, MAX_ERROR_BODY_LENGTH) + "…";
     }
 
     public void linkRichMenu(

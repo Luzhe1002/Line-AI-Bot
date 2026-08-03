@@ -2,6 +2,10 @@ FROM maven:3.9.11-eclipse-temurin-21 AS build
 
 WORKDIR /workspace
 
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pom.xml ./
 RUN mvn --batch-mode --no-transfer-progress dependency:go-offline
 
@@ -18,6 +22,10 @@ RUN mvn --batch-mode --no-transfer-progress -DskipTests package
 FROM eclipse-temurin:21-jre
 
 WORKDIR /app
+
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=package /workspace/target/line-ai-bot-*.jar /app/app.jar
 

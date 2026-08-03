@@ -51,6 +51,114 @@ test("portal remains usable at 320px without iOS input zoom or horizontal overfl
   expect(contrastRatio(colors.foreground, colors.background)).toBeGreaterThanOrEqual(4.5);
 });
 
+test("portal dashboard presents operational status and role-specific LINE entry", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+
+  await expect(page.locator("#app-view")).toBeVisible();
+  await expect(page.locator("#overview-status-title")).toHaveText("AI 客服已準備好服務顧客");
+  await expect(page.locator("#system-pill")).toHaveText("營運準備完成");
+  await expect(page.locator("#line-metric-value")).toHaveText("已連線");
+  await expect(page.locator("#document-count")).toHaveText("1");
+  await expect(page.locator("#staff-count")).toHaveText("2");
+
+  await page.getByRole("button", { name: "店家人員", exact: true }).click();
+  const owner = page.locator(".staff-item").filter({ hasText: "王店長" });
+  await expect(owner.getByText("顯示「管理後台」，可進入完整工作台。"))
+    .toBeVisible();
+  await expect(owner.locator(".staff-menu-note")).toContainText("管理後台");
+});
+
+test("knowledge items can be added, edited, and deleted without choosing a dataset", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "知識庫", exact: true }).click();
+
+  await expect(page.locator("#dataset-select")).toHaveCount(0);
+  await expect(page.locator("#knowledge-version")).toContainText("目前正式版");
+  await page.getByRole("button", { name: "新增知識", exact: true }).click();
+  await expect(page.locator("#document-form")).toBeVisible();
+  await page.locator("#document-form input[name=title]").fill("營業時間");
+  await page.locator("#document-form textarea[name=content]").fill("每天上午十點到晚上八點營業。");
+  await page.getByRole("button", { name: "新增並自動索引" }).click();
+
+  const item = page.locator(".document-item").filter({ hasText: "營業時間" });
+  await expect(item).toBeVisible();
+  await item.getByRole("button", { name: "編輯" }).click();
+  await page.locator("#document-form textarea[name=content]").fill("每天上午十點到晚上九點營業。");
+  await page.getByRole("button", { name: "儲存修改" }).click();
+  await expect(item).toContainText("晚上九點");
+
+  page.once("dialog", (dialog) => dialog.accept());
+  await item.getByRole("button", { name: "刪除" }).click();
+  await expect(item).toHaveCount(0);
+});
+
+test("reindexing published knowledge creates a publishable draft", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "知識庫", exact: true }).click();
+
+  await expect(page.locator("#knowledge-version")).toContainText("目前正式版");
+  await expect(page.getByRole("button", { name: "發布更新" })).toBeDisabled();
+  await page.getByText("索引異常處理", { exact: true }).click();
+  await page.getByRole("button", { name: "重新建立全部索引" }).click();
+
+  await expect(page.locator("#knowledge-version")).toContainText("待發布草稿");
+  await expect(page.getByRole("button", { name: "發布更新" })).toBeEnabled();
+  await page.getByRole("button", { name: "發布更新" }).click();
+  await expect(page.locator("#knowledge-version")).toContainText("目前正式版");
+});
+
+test("staff list removes redundant active labels and can remove a binding", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "店家人員", exact: true }).click();
+
+  await expect(page.getByText("啟用中", { exact: true })).toHaveCount(0);
+  const manager = page.locator(".staff-item").filter({ hasText: "林主管" });
+  await expect(manager).toBeVisible();
+  await manager.locator("summary").click();
+  page.once("dialog", (dialog) => dialog.accept());
+  await manager.getByRole("button", { name: "移除綁定" }).click();
+  await expect(manager).toHaveCount(0);
+  await expect(page.getByText("王店長", { exact: true })).toBeVisible();
+});
+
+test("expired portal sessions return to login with localized guidance", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "店家人員", exact: true }).click();
+
+  const owner = page.locator(".staff-item").filter({ hasText: "王店長" });
+  await owner.locator("summary").click();
+  await page.evaluate(() => fetch("/portal/api/test/expire-session", { method: "POST" }));
+  await owner.getByRole("button", { name: "儲存設定" }).click();
+
+  await expect(page.locator("#auth-view")).toBeVisible();
+  await expect(page.getByRole("alert"))
+    .toContainText("登入狀態已過期，請重新登入後再操作");
+});
+
+test("connected LINE channel marks every setup step complete", async ({ page }) => {
+  await page.goto("/portal/#token=e2e-token");
+  await page.getByRole("button", { name: "LINE 設定", exact: true }).click();
+
+  await expect(page.locator(".setup-steps li.done")).toHaveCount(3);
+  await expect(page.locator(".setup-steps li.active")).toHaveCount(0);
+  await expect(page.locator("#line-setup-status")).toContainText("LINE 設定已完成");
+});
+
+test("portal operations dashboard stays within a 375px mobile viewport", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  await page.goto("/portal/#token=e2e-token");
+
+  const metrics = await page.evaluate(() => ({
+    innerWidth: window.innerWidth,
+    scrollWidth: document.documentElement.scrollWidth,
+    metricColumns: getComputedStyle(document.querySelector(".metric-grid")).gridTemplateColumns,
+    navPosition: getComputedStyle(document.querySelector(".sidebar")).position,
+  }));
+  expect(metrics.scrollWidth).toBeLessThanOrEqual(metrics.innerWidth);
+  expect(metrics.metricColumns.trim().split(/\s+/)).toHaveLength(1);
+  expect(metrics.navPosition).toBe("fixed");
+});
+
 test("customer booking moves focus through the complete happy path", async ({ page }) => {
   await page.goto("/booking/demo/#token=e2e-token");
 
@@ -106,6 +214,12 @@ test("merchant agenda shows loading/error feedback and localized role", async ({
   await page.goto("/merchant-booking/demo/#token=e2e-token");
   await expect(page.locator("#tenant-name")).toHaveText("測試店家");
   await expect(page.locator("#role-badge")).toHaveText("擁有者");
+  await expect(page.locator(".eyebrow")).toHaveText([
+    "店家預約管理",
+    "當日行程",
+    "暫停開放",
+    "封鎖紀錄",
+  ]);
 
   const refresh = page.locator("#refresh-button");
   await refresh.click();

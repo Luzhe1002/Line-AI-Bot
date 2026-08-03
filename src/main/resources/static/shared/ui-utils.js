@@ -53,8 +53,37 @@
     }[role] || role || "未知權限";
   }
 
+  function knowledgeIndexStatusLabel(status) {
+    return {
+      READY: "可使用",
+      FAILED: "索引失敗",
+      INDEXING: "處理中",
+      PENDING: "等待處理",
+    }[status] || status;
+  }
+
+  function lineSetupState(configured, enabled) {
+    const hasCredentials = Boolean(configured);
+    const canReply = hasCredentials && Boolean(enabled);
+    return Object.freeze({
+      completed: Object.freeze({
+        credentials: hasCredentials,
+        webhook: hasCredentials,
+        status: canReply,
+      }),
+      current: hasCredentials ? (canReply ? null : "status") : "credentials",
+      message: canReply
+        ? "LINE 設定已完成，Channel 目前可接收與回覆訊息。"
+        : (hasCredentials
+          ? "憑證與 Webhook 網址已完成，最後請啟用 LINE 回覆。"
+          : "先儲存 Channel 憑證，系統會接著引導 Webhook 與啟用狀態。"),
+    });
+  }
+
   return Object.freeze({
     createLatestRequestGate,
+    knowledgeIndexStatusLabel,
+    lineSetupState,
     roleLabel,
     tabIndexForKey,
     withRecoveryMessage,

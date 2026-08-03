@@ -32,6 +32,13 @@ LINE 電腦版不顯示 Rich Menu。管理者可改用文字指令 `管理預約
 6. 呼叫 LINE per-user rich menu API，把角色選單綁定到加密保存的 LINE user ID。
 7. 同步成功後標記 SYNCED。
 
+LINE 不允許替換已設定在 Rich Menu 上的圖片，因此不能在既有 ID 上重傳中文圖。
+`V5__replace_staff_rich_menus_with_chinese_version.sql` 會清除舊 ID、增加同步 revision，
+再由 Worker 以版本化名稱建立中文選單。`V6__force_chinese_staff_rich_menu_v2.sql`
+會再建立一個全新的 `zh-tw-v2` 選單 ID，避免 LINE 客戶端延用首次上線時的
+選單物件或圖片快取。已綁定人員會自動切換，不需要重新綁定
+LINE；舊選單不再綁定任何人員。
+
 角色或狀態更新會增加 revision 並重新標記 READY。進行中的舊工作只能更新相同
 revision，因此不會覆蓋較新的期望狀態。
 
@@ -40,7 +47,7 @@ revision，因此不會覆蓋較新的期望狀態。
 
 ## OWNER 完整工作台登入
 
-1. OWNER 點個人圖文選單的 `PORTAL`。
+1. OWNER 點個人圖文選單的「管理後台」。
 2. LINE 送出 `action=merchant_portal` postback。
 3. Webhook 簽章、事件去重及人員狀態檢查通過後，建立 purpose 為
    `PORTAL_LOGIN` 的十分鐘單次 Token。
@@ -97,8 +104,8 @@ ID 並於下一次重試建立新選單。
 
 1. 確認顧客帳號只看到原本預設圖文選單。
 2. 綁定 OWNER，確認數秒內切換為 OWNER 個人選單。
-3. 點 `PORTAL`，確認連結只能登入一次，且網址 fragment 立即消失。
-4. 綁定 MANAGER／VIEWER，確認左上入口不是完整 Portal。
+3. 點「管理後台」，確認連結只能登入一次，且網址 fragment 立即消失。
+4. 綁定 MANAGER／VIEWER，確認左上入口顯示「預約管理」而不是完整工作台。
 5. 以 VIEWER 嘗試取消或封鎖時段，確認後端拒絕。
 6. 將人員設為 DISABLED，確認個人選單解除並恢復顧客預設選單。
 7. 暫停 LINE API 或填入無效 Token，確認綁定仍成功且同步進入 RETRY。

@@ -16,6 +16,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class MerchantRichMenuService {
 
     private static final Logger log = LoggerFactory.getLogger(MerchantRichMenuService.class);
+    private static final String MENU_REVISION = "zh-tw-v2";
     private static final int HALF_WIDTH = MerchantRichMenuImageFactory.WIDTH / 2;
     private static final int HALF_HEIGHT = MerchantRichMenuImageFactory.HEIGHT / 2;
 
@@ -223,7 +224,8 @@ public class MerchantRichMenuService {
                 "height", HALF_HEIGHT);
     }
 
-    private String menuName(String tenantId, String role) {
-        return "line-ai-bot-staff-" + tenantId + "-" + role.toLowerCase();
+    static String menuName(String tenantId, String role) {
+        return "line-ai-bot-staff-" + tenantId + "-" + role.toLowerCase()
+                + "-" + MENU_REVISION;
     }
 }

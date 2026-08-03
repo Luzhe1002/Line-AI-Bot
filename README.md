@@ -176,7 +176,8 @@ http://localhost:8000/portal/
 - 貼上知識內容，或上傳 UTF-8 TXT、Markdown、CSV（最多 100,000 字）。
 - 查看文件索引狀態、編輯或刪除草稿文件、重新索引、測試 AI 回答與引用。
 - 發布資料集及設定 LINE Channel。
-- 產生一次性店家人員綁定碼、設定 OWNER／MANAGER／VIEWER 權限及通知偏好。
+- 產生一次性店家人員綁定碼、設定 OWNER／MANAGER／VIEWER 權限與通知偏好，
+  或移除既有人員的 LINE 管理綁定。
 
 已發布的資料集是唯讀快照。若在正式版畫面新增內容，工作台會自動複製成
 下一版草稿；編輯與刪除只影響草稿，直到再次發布才會取代 LINE 使用中的版本。
@@ -211,7 +212,7 @@ APP_SESSION_COOKIE_SECURE=true
 - 一般顧客只會看到商家既有的預設圖文選單；系統不會把管理按鈕加入預設選單。
 - 已綁定人員會看到優先權較高的個人圖文選單，可直接開啟管理入口、今日預約、
   未來七天預約或切回顧客預約流程。
-- OWNER 點擊「PORTAL」後，Webhook 會再次確認其綁定狀態與角色，再回覆十分鐘
+- OWNER 點擊「管理後台」後，Webhook 會再次確認其綁定狀態與角色，再回覆十分鐘
   有效、單次使用的完整工作台登入連結。連結交換成 HttpOnly Session 後立即
   從網址移除。
 - MANAGER／VIEWER 的主要入口只開啟預約管理頁；實際寫入權限仍由後端角色檢查。
@@ -355,3 +356,4 @@ docker compose config --quiet
 | `POST /api/v1/tenants/{id}/ai/answer` | 測試知識庫回答 |
 | `POST /webhooks/line/{tenantSlug}` | LINE Webhook |
 | `POST /portal/api/line-session` | 以 OWNER 的十分鐘單次 LINE 管理 Token 換取工作台 Session |
+| `DELETE /portal/api/staff/{staffId}` | 移除人員管理權限並排程解除 LINE 個人選單 |
