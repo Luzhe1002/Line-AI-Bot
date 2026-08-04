@@ -7,7 +7,7 @@ services:
     branch: main
     dockerfilePath: ./Dockerfile
     dockerContext: .
-    healthCheckPath: /portal/
+    healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
       - key: DATABASE_URL
@@ -22,6 +22,8 @@ services:
         generateValue: true
       - key: APP_SESSION_COOKIE_SECURE
         value: "true"
+      - key: APP_API_DOCS_ENABLED
+        value: "false"
       - key: APP_AI_PROVIDER
         value: openai
       - key: OPENAI_API_KEY

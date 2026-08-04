@@ -6,12 +6,14 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.lineaibot.booking.BookingAccessTokenService;
 import com.lineaibot.line.LineEventProcessor;
 import com.lineaibot.line.LineRepository;
+import com.lineaibot.shared.SecurityHeadersFilter;
 import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -66,11 +68,16 @@ class ApplicationIntegrationTest {
     @Autowired
     private JdbcClient jdbc;
 
+    @Autowired
+    private SecurityHeadersFilter securityHeadersFilter;
+
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        mvc = MockMvcBuilders.webAppContextSetup(context).build();
+        mvc = MockMvcBuilders.webAppContextSetup(context)
+                .addFilters(securityHeadersFilter)
+                .build();
     }
 
     @Test
@@ -98,6 +105,31 @@ class ApplicationIntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(tenant.id()))
                 .andExpect(jsonPath("$.slug").value(tenant.slug()));
+    }
+
+    @Test
+    void healthCheckVerifiesApplicationAndDatabaseReadiness() throws Exception {
+        mvc.perform(get("/health"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ok"))
+                .andExpect(jsonPath("$.service").value("LINE AI Bot"));
+    }
+
+    @Test
+    void browserSecurityHeadersAndSensitiveApiCachePolicyAreApplied() throws Exception {
+        mvc.perform(get("/portal/"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("X-Content-Type-Options", "nosniff"))
+                .andExpect(header().string("X-Frame-Options", "DENY"))
+                .andExpect(header().string("Referrer-Policy", "no-referrer"))
+                .andExpect(header().string(
+                        "Content-Security-Policy",
+                        org.hamcrest.Matchers.containsString("frame-ancestors 'none'")));
+
+        mvc.perform(get("/portal/api/session"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-store"))
+                .andExpect(header().string("Pragma", "no-cache"));
     }
 
     @Test
@@ -417,6 +449,36 @@ class ApplicationIntegrationTest {
                                 """
                                 .formatted(serviceId, slot)))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void inactiveBookingServicesCannotBeReserved() throws Exception {
+        Tenant tenant = createTenant("inactive-service");
+        String serviceId = firstId(getJson(
+                "/api/v1/tenants/" + tenant.id() + "/booking-services",
+                tenant.apiKey()));
+        jdbc.sql("""
+                        update booking_services set active = false
+                        where id = :serviceId and tenant_id = :tenantId
+                        """)
+                .param("serviceId", serviceId)
+                .param("tenantId", tenant.id())
+                .update();
+
+        mvc.perform(post("/api/v1/tenants/{tenantId}/reservations", tenant.id())
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "service_id": "%s",
+                                  "line_user_id": "U-inactive-service",
+                                  "starts_at": "%s",
+                                  "idempotency_key": "inactive-service-0001"
+                                }
+                                """
+                                .formatted(serviceId, nextBusinessSlot())))
+                .andExpect(status().isUnprocessableEntity())
+                .andExpect(jsonPath("$.detail").value("Booking service is inactive"));
     }
 
     @Test
