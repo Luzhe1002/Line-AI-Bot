@@ -112,7 +112,7 @@ public class BookingManager {
         if (existing.isPresent()) {
             return existing.get();
         }
-        requireService(tenant.id(), serviceId);
+        requireActiveService(tenant.id(), serviceId);
         validateSlot(tenant, startsAt);
 
         Instant now = Instant.now();
@@ -270,6 +270,16 @@ public class BookingManager {
         return repository.findService(tenantId, serviceId)
                 .orElseThrow(() -> new ApiException(
                         HttpStatus.NOT_FOUND, "Booking service not found"));
+    }
+
+    private BookingRepository.ServiceRow requireActiveService(
+            String tenantId, String serviceId) {
+        BookingRepository.ServiceRow service = requireService(tenantId, serviceId);
+        if (!service.active()) {
+            throw new ApiException(
+                    HttpStatus.UNPROCESSABLE_ENTITY, "Booking service is inactive");
+        }
+        return service;
     }
 
     private void validateSlot(TenantRow tenant, Instant startsAt) {

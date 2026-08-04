@@ -2,9 +2,12 @@
 
 > 面向中小型商家的多租戶 LINE 客服平台，整合 AI 知識庫問答、線上預約、店家人員管理與即時通知。
 
+[![CI](https://github.com/Luzhe1002/Line-AI-Bot/actions/workflows/ci.yml/badge.svg)](https://github.com/Luzhe1002/Line-AI-Bot/actions/workflows/ci.yml)
+
 [線上工作台](https://line-ai-bot-mj1n.onrender.com/portal/) ·
-[Swagger API](https://line-ai-bot-mj1n.onrender.com/docs) ·
 [系統架構](docs/architecture.md) ·
+[專案稽核](docs/project-review.md) ·
+[履歷專案稿](docs/portfolio.md) ·
 [API 操作範例](docs/api-examples.http)
 
 ## 專案概覽
@@ -62,11 +65,11 @@ flowchart LR
 | 非同步處理 | Java Virtual Threads、Database-backed Queue、Outbox | 事件持久化、Claim、重試、過期復原及傳送稽核 |
 | Frontend | HTML、CSS、JavaScript | 商家工作台、顧客預約頁與店家手機管理頁 |
 | Delivery | Docker Compose、Render | 容器化本機環境與雲端測試部署 |
-| Testing | JUnit、Spring Boot Test、H2、Pytest | Java 主架構整合測試與舊版契約參考測試 |
+| Testing | JUnit、Spring Boot Test、H2、Node Test、Playwright | Java 主架構整合測試、前端邏輯與瀏覽器流程測試 |
 
 ## 工程設計亮點
 
-- **多租戶隔離：** 所有商家資料查詢與寫入都明確包含 `tenant_id`，並區分 Platform Admin、Tenant Admin 及 OWNER／MANAGER／VIEWER 權限。
+- **多租戶隔離：** 所有可由使用者指定資源的商家資料存取都以 `tenant_id` 限定，並區分 Platform Admin、Tenant Admin 及 OWNER／MANAGER／VIEWER 權限。
 - **可靠事件處理：** LINE 事件先落庫，以條件式 Claim、最多三次重試及逾時復原支援至少一次處理；Outbox 保留回覆與通知結果。
 - **預約一致性：** 冪等鍵避免相同請求重複建立，預約與店家封鎖共用資料庫時段占用限制，並在同一交易內競爭時段。
 - **可信 AI 邊界：** AI 只能輸出文字，無法直接異動預約；檢索內容受租戶、資料集版本、模型與維度限制。
@@ -76,10 +79,10 @@ flowchart LR
 ## 線上展示
 
 - 商家管理工作台：<https://line-ai-bot-mj1n.onrender.com/portal/>
-- Swagger UI：<https://line-ai-bot-mj1n.onrender.com/docs>
-- OpenAPI JSON：<https://line-ai-bot-mj1n.onrender.com/openapi.json>
 
 測試環境若處於休眠，第一次開啟可能需要等待數十秒。顧客預約頁與店家手機管理頁需要由 LINE 產生綁定租戶及使用者的短效憑證，因此不提供匿名操作入口。
+Production 展示站不公開 Swagger／OpenAPI；本機開發預設保留 `/docs` 與
+`/openapi.json`，可用 `APP_API_DOCS_ENABLED` 控制。
 
 ## 主要功能
 
@@ -310,6 +313,12 @@ POST /api/v1/tenants/{tenantId}/datasets/{datasetId}/reindex
 
 ## 測試
 
+一鍵驗證 Java 主線、前端邏輯、Playwright E2E 與 Compose 設定：
+
+```powershell
+.\scripts\verify.ps1
+```
+
 本機有 JDK 21／Maven 時：
 
 ```powershell
@@ -323,6 +332,10 @@ docker build --target test .
 docker compose config --quiet
 ```
 
+沒有 Maven 時，驗證腳本會自動使用 Docker `test` stage。CI 會在 Push 與 Pull
+Request 執行同一套驗證；Dependabot 每週檢查 Maven、npm、Docker 與 GitHub
+Actions 依賴。
+
 測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、
 店家人員綁定、LINE 預約查詢與取消、通知事件、單次管理 Session、封鎖時段、
 知識庫隔離、LINE 原始 Body 簽章、事件去重及模擬 Outbox。
@@ -332,6 +345,9 @@ docker compose config --quiet
 ```powershell
 .\.venv\Scripts\python -m pytest
 ```
+
+完整驗收依據、已知風險與未驗證範圍請見 [專案稽核報告](docs/project-review.md)。
+部署、事故處理與還原程序請見 [操作手冊](docs/operations-runbook.md)。
 
 ## 舊資料遷移
 

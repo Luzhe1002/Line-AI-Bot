@@ -13,7 +13,9 @@
 - `shared`：API 權限、密碼學與一致的錯誤格式。
 - `config`：型別化環境設定與有界 LINE Worker。
 
-Repository 使用 Spring `JdbcClient`，所有租戶資料 SQL 都明確帶入 `tenant_id`。這比在轉換初期依賴隱含 ORM Filter 更容易稽核隔離條件。
+Repository 使用 Spring `JdbcClient`。所有可由 API、Session 或 LINE 使用者指定資源的
+商家資料 SQL 都明確帶入 `tenant_id`；少數 Worker 內部 Queue 操作以全域 UUID Claim，
+只接受前一步從資料庫取得的 ID。這比在轉換初期依賴隱含 ORM Filter 更容易稽核隔離條件。
 
 ## 執行流程
 
@@ -200,6 +202,8 @@ RabbitMQ、SQS 或 Kafka 在 API／Worker 需要獨立擴縮、持續高流量�
 - 顧客預設選單與店家個人選單分離；只有已綁定人員會建立 per-user 同步工作。
 - 預約與封鎖共用資料庫唯一時段占用，不依賴前端「先查再寫」。
 - Production 模式拒絕預設管理金鑰與加密金鑰。
+- 回應套用 CSP、Frame 防護、`nosniff`、Referrer 與 Permissions Policy；Production
+  另啟用 HSTS，敏感 API 回應使用 `Cache-Control: no-store`。
 - 商家工作台以 Tenant API Key 換取 HttpOnly Session，API Key 不保存於瀏覽器。
 - 工作台所有資料仍由伺服器 Session 決定 `tenant_id`，不接受前端自行指定租戶。
 - 工作台寫入操作要求與 Session 綁定的 CSRF Token；正式環境 Cookie 必須啟用 Secure。
@@ -222,4 +226,5 @@ TXT／Markdown／CSV 匯入、索引、發布及回答測試。檔案大小先�
 歷史對話匯入會採獨立流程：檔案掃描、格式解析、個資遮蔽、候選 FAQ 萃取、
 人工核准、加入草稿、索引與發布。未核准的對話不能進入 Active Dataset。
 
-正式上線前仍需加入 Secret Manager、管理員 RBAC、限流、Metrics／Tracing、個資保存期限、備份還原演練與檔案惡意內容掃描。
+正式上線前仍需完成受管 Secret Manager 與輪替、登入及高成本端點限流、
+Metrics／Tracing／告警、個資保存期限與刪除流程、備份還原演練，以及檔案惡意內容掃描。
