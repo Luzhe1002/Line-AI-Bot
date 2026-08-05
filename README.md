@@ -333,8 +333,8 @@ docker compose config --quiet
 ```
 
 沒有 Maven 時，驗證腳本會自動使用 Docker `test` stage。CI 會在 Push 與 Pull
-Request 執行同一套驗證；Dependabot 每週檢查 Maven、npm、Docker 與 GitHub
-Actions 依賴。
+Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions 的 minor／patch
+更新分組。Java 21 Docker build／runtime image 由人工規劃升級，避免自動跨 JDK major。
 
 測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、
 店家人員綁定、LINE 預約查詢與取消、通知事件、單次管理 Session、封鎖時段、
