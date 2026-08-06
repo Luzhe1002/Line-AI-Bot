@@ -47,7 +47,7 @@ RAG Provider，以及商家與顧客前端。它適合作為履歷專案，但�
 | R-01 | 正式站缺少 CSP、HSTS、Frame、`nosniff` 與 Referrer 等標頭 | 新增全站 Security Header Filter，Production 啟用 HSTS，敏感 API 設 `no-store` |
 | R-02 | 停用服務可由舊連結或直接 API 建立預約 | `BookingManager` 在寫入前驗證服務為 active，並新增整合測試 |
 | R-03 | 專案 skill 驗證腳本仍執行舊 Python 主線 | 統一委派至 Java／前端驗證腳本；無 Maven 時自動使用 Docker test stage |
-| R-04 | 沒有持續整合與依賴更新機制 | 新增 GitHub Actions 與 Maven／npm／Docker／Actions Dependabot 設定 |
+| R-04 | 沒有持續整合與依賴更新機制 | 新增 GitHub Actions；Dependabot 分組 Maven／npm／Actions 的 minor／patch，Java 21 image major 由人工審查 |
 | R-05 | Render 文件與實際 OpenAI／LINE 設定不一致 | 修正文檔並明確區分展示部署與正式營運 |
 | R-06 | Render 以靜態頁作 Health Check，且公開 Swagger／OpenAPI | 改用 `/health`，Production 由環境變數關閉 API 文件 |
 
