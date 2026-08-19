@@ -167,6 +167,14 @@ Session 保存 `tenant_id + staff_id`，每次 API 呼叫都重新確認 OWNER �
 5. 以 Cosine Similarity 與中英文文字特徵混合排序，並限制 Context 數量與總字數。
 6. 達相關性門檻才生成回答；引用由後端檢索結果建立，不採信模型自行產生的來源。
 7. 沒有可靠資料時回覆無法確認並提供人工客服選項。
+8. 問答與文件索引在 Provider 呼叫前建立 `ai_usage_events` 租約；同一資料庫交易內
+   鎖定全域控制列，檢查使用者速率、租戶／全域日額度及租戶並行上限，避免多副本
+   同時通過檢查。
+9. Provider 完成後以實際 usage 結算 input、cached、output、reasoning 與 total tokens；
+   Provider 失敗或租約逾時時保守扣除預留 tokens。LINE User ID 只以 HMAC actor key
+   記帳，不保存原值。
+10. `APP_AI_ENABLED=false` 是全域熔斷開關；任何限額拒絕都在 Embedding／Responses
+    呼叫前發生，回覆固定訊息並保留 `REJECTED` 稽核事件。
 
 Local Provider 可完全離線驗證。OpenAI Provider 使用 Embeddings 與 Responses API、`store=false`，LINE User ID 先以 HMAC 轉成不可逆穩定識別碼。模型不直接取得資料庫或預約工具權限。
 離線檢索可用小型、經測試的商務同義詞群補足常見中文問法，但正式語意召回仍應使用 OpenAI Embeddings；不以降低全域相關性門檻取代語意檢索。

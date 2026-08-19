@@ -155,6 +155,29 @@ public class AppProperties {
         private int chunkOverlapChars = 150;
         private int maxOutputTokens = 500;
         private int timeoutSeconds = 20;
+        private boolean enabled = true;
+
+        @Min(1)
+        private int userRequestsPerMinute = 5;
+
+        @Min(1)
+        private int userRequestsPerDay = 50;
+
+        @Min(1)
+        private int tenantRequestsPerDay = 1000;
+
+        @Min(1)
+        private long tenantDailyTokenLimit = 500_000;
+
+        @Min(1)
+        private long globalDailyTokenLimit = 5_000_000;
+
+        @Min(1)
+        private int maxConcurrentRequestsPerTenant = 8;
+
+        @Min(30)
+        private int pendingLeaseSeconds = 120;
+
         private String openaiApiKey;
         private String openaiBaseUrl = "https://api.openai.com/v1";
 
@@ -252,6 +275,70 @@ public class AppProperties {
 
         public void setTimeoutSeconds(int timeoutSeconds) {
             this.timeoutSeconds = timeoutSeconds;
+        }
+
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
+
+        public int getUserRequestsPerMinute() {
+            return userRequestsPerMinute;
+        }
+
+        public void setUserRequestsPerMinute(int userRequestsPerMinute) {
+            this.userRequestsPerMinute = userRequestsPerMinute;
+        }
+
+        public int getUserRequestsPerDay() {
+            return userRequestsPerDay;
+        }
+
+        public void setUserRequestsPerDay(int userRequestsPerDay) {
+            this.userRequestsPerDay = userRequestsPerDay;
+        }
+
+        public int getTenantRequestsPerDay() {
+            return tenantRequestsPerDay;
+        }
+
+        public void setTenantRequestsPerDay(int tenantRequestsPerDay) {
+            this.tenantRequestsPerDay = tenantRequestsPerDay;
+        }
+
+        public long getTenantDailyTokenLimit() {
+            return tenantDailyTokenLimit;
+        }
+
+        public void setTenantDailyTokenLimit(long tenantDailyTokenLimit) {
+            this.tenantDailyTokenLimit = tenantDailyTokenLimit;
+        }
+
+        public long getGlobalDailyTokenLimit() {
+            return globalDailyTokenLimit;
+        }
+
+        public void setGlobalDailyTokenLimit(long globalDailyTokenLimit) {
+            this.globalDailyTokenLimit = globalDailyTokenLimit;
+        }
+
+        public int getMaxConcurrentRequestsPerTenant() {
+            return maxConcurrentRequestsPerTenant;
+        }
+
+        public void setMaxConcurrentRequestsPerTenant(int maxConcurrentRequestsPerTenant) {
+            this.maxConcurrentRequestsPerTenant = maxConcurrentRequestsPerTenant;
+        }
+
+        public int getPendingLeaseSeconds() {
+            return pendingLeaseSeconds;
+        }
+
+        public void setPendingLeaseSeconds(int pendingLeaseSeconds) {
+            this.pendingLeaseSeconds = pendingLeaseSeconds;
         }
 
         public String getOpenaiApiKey() {
