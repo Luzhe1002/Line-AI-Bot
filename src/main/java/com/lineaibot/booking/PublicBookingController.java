@@ -9,6 +9,7 @@ import com.lineaibot.shared.ApiException;
 import com.lineaibot.tenant.TenantRepository;
 import jakarta.validation.Valid;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -53,9 +54,22 @@ public class PublicBookingController {
                 tenant.slug(),
                 tenant.timezone(),
                 tenant.slotMinutes(),
+                "TWD",
                 bookingRepository.findActiveServices(tenant.id()).stream()
                         .map(service -> new BookingDtos.PublicBookingService(
-                                service.id(), service.name(), service.description()))
+                                service.id(),
+                                service.name(),
+                                service.description(),
+                                service.durationMinutes(),
+                                service.priceAmount(),
+                                service.addOns().stream()
+                                        .map(addOn -> new BookingDtos.PublicBookingAddOn(
+                                                addOn.id(),
+                                                addOn.name(),
+                                                addOn.description(),
+                                                addOn.durationMinutes(),
+                                                addOn.priceAmount()))
+                                        .toList()))
                         .toList());
     }
 
@@ -65,14 +79,19 @@ public class PublicBookingController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false)
                     String authorization,
             @RequestParam(name = "service_id") String serviceId,
+            @RequestParam(name = "add_on_ids", required = false) List<String> addOnIds,
             @RequestParam(name = "local_date") LocalDate localDate) {
         var tenant = requireTenant(tenantSlug, authorization);
+        var quote = bookings.quote(tenant.id(), serviceId, addOnIds);
         return new AvailabilityResponse(
                 tenant.id(),
                 serviceId,
+                quote.addOnIds(),
                 localDate,
                 tenant.timezone(),
-                bookings.listAvailableSlots(tenant, serviceId, localDate));
+                quote.durationMinutes(),
+                quote.totalPriceAmount(),
+                bookings.listAvailableSlots(tenant, serviceId, addOnIds, localDate));
     }
 
     @PostMapping("/reservations")
@@ -88,6 +107,7 @@ public class PublicBookingController {
                 tenant,
                 new ReservationCreate(
                         request.serviceId(),
+                        request.addOnIds(),
                         identity.lineUserId(),
                         request.startsAt(),
                         request.customerName(),

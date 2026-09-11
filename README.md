@@ -91,7 +91,8 @@ Production 展示站不公開 Swagger／OpenAPI；本機開發預設保留 `/doc
 - LINE Channel Secret 與 Access Token 加密保存。
 - LINE 原始 Body HMAC-SHA256 簽章驗證及 `tenant_id + webhookEventId` 去重。
 - 持久化 `line_events`、有界 Virtual Thread Worker、失敗重試與 LINE Outbox 稽核。
-- 一對一時段預約、冪等建立、取消釋放時段及店家封鎖共同占用限制。
+- 可設定主服務與多選加購、依組合計算時間與價格，並以連續時段占用維持一對一預約。
+- 預約冪等建立、取消釋放時段及店家封鎖共同占用限制。
 - LINE 文字意圖、預約入口、取消確認、人工客服工單及店家管理指令。
 - 店家人員綁定、角色專屬個人圖文選單、預約查詢、主動通知、每日摘要及手機月曆。
 - 知識庫草稿、文件切塊、索引、重新索引、版本發布、租戶限定檢索與引用。
@@ -337,7 +338,8 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 更新分組。Java 21 Docker build／runtime image 由人工規劃升級，避免自動跨 JDK major。
 
 測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、
-店家人員綁定、LINE 預約查詢與取消、通知事件、單次管理 Session、封鎖時段、
+主服務與加購的時間價格快照及連續時段占用、店家人員綁定、LINE 預約查詢與取消、
+通知事件、單次管理 Session、封鎖時段、
 知識庫隔離、LINE 原始 Body 簽章、事件去重及模擬 Outbox。
 
 原 FastAPI 驗證仍可另外執行，但只代表舊版參考實作：
@@ -360,6 +362,10 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 | `POST /api/v1/tenants` | 建立商家並取得只顯示一次的管理 API Key |
 | `PUT /api/v1/tenants/{id}/line-channel` | 設定 LINE Channel |
 | `PUT /api/v1/tenants/{id}/business-hours` | 設定每週營業時間 |
+| `GET/POST /api/v1/tenants/{id}/booking-services` | 查詢或建立含時間、價格與可用加購的主服務 |
+| `PUT /api/v1/tenants/{id}/booking-services/{serviceId}` | 更新主服務與可選加購 |
+| `GET/POST /api/v1/tenants/{id}/booking-add-ons` | 查詢或建立可重複使用的加購項目 |
+| `PUT /api/v1/tenants/{id}/booking-add-ons/{addOnId}` | 更新或停用加購項目 |
 | `GET /api/v1/tenants/{id}/availability` | 查詢指定日期可預約時段 |
 | `POST /api/v1/tenants/{id}/reservations` | 建立預約 |
 | `POST /api/v1/tenants/{id}/reservations/{id}/cancel` | 取消預約 |
