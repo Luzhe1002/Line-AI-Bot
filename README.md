@@ -86,6 +86,10 @@ Production 展示站不公開 Swagger／OpenAPI；本機開發預設保留 `/doc
 
 ## 主要功能
 
+工作台的「服務項目」集中管理主服務與加購；「商家設定」顯示基本資料，
+並提供獨立「LINE 串接」頁的入口。LINE 登入工作台仍限 OWNER，管理金鑰
+持有人可管理商家；本次分頁調整不擴大 MANAGER 或 VIEWER 的存取權限。
+
 - 多租戶資料隔離，每個商家有獨立管理 API Key。
 - Platform Admin、Tenant Admin 與店家人員角色驗證。
 - LINE Channel Secret 與 Access Token 加密保存。

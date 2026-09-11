@@ -138,6 +138,8 @@ test("expired portal sessions return to login with localized guidance", async ({
 test("connected LINE channel marks every setup step complete", async ({ page }) => {
   await page.goto("/portal/#token=e2e-token");
   await page.getByRole("button", { name: "商家設定", exact: true }).click();
+  await expect(page.locator("#line-form")).toBeHidden();
+  await page.getByRole("button", { name: "管理 LINE 串接", exact: true }).click();
 
   await expect(page.locator(".setup-steps li.done")).toHaveCount(3);
   await expect(page.locator(".setup-steps li.active")).toHaveCount(0);
@@ -146,7 +148,8 @@ test("connected LINE channel marks every setup step complete", async ({ page }) 
 
 test("merchant can create a reusable add-on and attach it to a service", async ({ page }) => {
   await page.goto("/portal/#token=e2e-token");
-  await page.getByRole("button", { name: "商家設定", exact: true }).click();
+  await page.getByRole("button", { name: "服務項目", exact: true }).click();
+  await expect(page.locator("#line-form")).toBeHidden();
 
   const addOnForm = page.locator("#add-on-form");
   await addOnForm.getByLabel("加購名稱").fill("頭皮按摩");

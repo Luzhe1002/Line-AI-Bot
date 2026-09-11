@@ -193,7 +193,7 @@ function renderOverview() {
   const activeDataset = overview.datasets.find((item) => item.status === "ACTIVE");
   const checks = [
     { done: true, title: "商家空間", copy: "基本資料與租戶隔離已建立", view: "overview" },
-    { done: hasLine, title: "LINE 官方帳號", copy: hasLine ? "Channel 已安全連接" : "加入 Secret 與 Access Token", view: "settings" },
+    { done: hasLine, title: "LINE 官方帳號", copy: hasLine ? "Channel 已安全連接" : "加入 Secret 與 Access Token", view: "line" },
     { done: hasKnowledge, title: "可信知識", copy: hasKnowledge ? "已有完成索引的文件" : "加入第一份客服資料", view: "knowledge" },
     { done: Boolean(activeDataset), title: "發布客服知識", copy: activeDataset ? "顧客已能使用正式知識" : "測試後發布目前草稿", view: "knowledge" },
   ];
@@ -340,6 +340,12 @@ async function editDocument(documentId) {
 }
 
 function renderSettings() {
+  $("#merchant-settings-summary").innerHTML = [
+    ["商家名稱", state.tenant.name],
+    ["網址代稱", state.tenant.slug],
+    ["時區", state.tenant.timezone],
+    ["預約間隔", `${state.tenant.slot_minutes} 分鐘`],
+  ].map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join("");
   const line = state.overview.line_channel;
   const configured = Boolean(line.configured);
   const enabled = configured && Boolean(line.enabled);
@@ -513,7 +519,7 @@ function switchView(name) {
   $$(".view").forEach((view) => view.classList.add("hidden"));
   $(`#view-${name}`).classList.remove("hidden");
   $$(".nav-item").forEach((item) => {
-    const active = item.dataset.view === name;
+    const active = item.dataset.view === name || (name === "line" && item.dataset.view === "settings");
     item.classList.toggle("active", active);
     if (active) item.setAttribute("aria-current", "page");
     else item.removeAttribute("aria-current");
@@ -523,7 +529,9 @@ function switchView(name) {
     knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。", "編輯、索引與發布都集中在同一個工作區。"],
     tester: ["ANSWER LAB", "每次發布前，都先問一次。", "用顧客的角度確認回答內容、信心與引用來源。"],
     staff: ["MERCHANT STAFF", "把日常預約管理留在 LINE。", "設定角色、通知與每位人員會看到的中文管理入口。"],
-    settings: ["MERCHANT SETTINGS", "把預約服務與 LINE 設定好。", "管理主服務、加購、時間、價格與官方帳號連線。"],
+    settings: ["MERCHANT SETTINGS", "商家設定", "查看基本資料與管理 LINE 串接。"],
+    services: ["SERVICE CATALOG", "服務項目", "管理主服務、加購、時間、價格與開放狀態。"],
+    line: ["LINE CONNECTION", "LINE 串接", "設定官方帳號憑證與確認連線狀態。"],
   };
   $("#page-eyebrow").textContent = titles[name][0];
   $("#page-title").textContent = titles[name][1];

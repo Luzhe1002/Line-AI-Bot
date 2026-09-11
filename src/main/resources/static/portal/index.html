@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css?v=20260902">
+  <link rel="stylesheet" href="/portal/styles.css?v=20260911-navigation">
   <script src="/shared/ui-utils.js?v=20260731-3" defer></script>
-  <script src="/portal/app.js?v=20260902" defer></script>
+  <script src="/portal/app.js?v=20260911-navigation" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -92,6 +92,10 @@
         <button class="nav-item" data-view="staff" type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg>
           <span class="nav-label">店家人員</span>
+        </button>
+        <button class="nav-item" data-view="services" type="button">
+          <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 5h13M8 12h13M8 19h13M3 5h1M3 12h1M3 19h1"/></svg>
+          <span class="nav-label">服務項目</span>
         </button>
         <button class="nav-item" data-view="settings" type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 4h8M6 8h12M4 12h16M6 16h12M8 20h8"/><circle cx="12" cy="12" r="3"/></svg>
@@ -191,7 +195,7 @@
               <button class="quick-action" data-go-view="knowledge" type="button"><span>01</span><strong>新增客服知識</strong><small>建立或編輯可信內容</small></button>
               <button class="quick-action" data-go-view="tester" type="button"><span>02</span><strong>測試 AI 回答</strong><small>發布前確認語氣與引用</small></button>
               <button class="quick-action" data-go-view="staff" type="button"><span>03</span><strong>管理店家人員</strong><small>設定角色與 LINE 選單</small></button>
-              <button class="quick-action" data-go-view="settings" type="button"><span>04</span><strong>管理服務與 LINE</strong><small>設定加購、時間、價格與 Webhook</small></button>
+              <button class="quick-action" data-go-view="services" type="button"><span>04</span><strong>管理服務項目</strong><small>設定主服務、加購、時間與價格</small></button>
             </div>
           </aside>
         </div>
@@ -295,6 +299,18 @@
       </section>
 
       <section id="view-settings" class="view hidden">
+        <article class="panel stack">
+          <h2>商家基本資料</h2>
+          <p class="muted">目前商家資料與預約時間設定。</p>
+          <dl id="merchant-settings-summary"></dl>
+          <h3>LINE 串接</h3>
+          <p class="muted">由商家擁有者或管理金鑰持有人設定官方帳號憑證與 Webhook。</p>
+          <button class="secondary" data-go-view="line" type="button">管理 LINE 串接</button>
+        </article>
+      </section>
+
+      <section id="view-line" class="view hidden">
+        <button class="text-button" data-go-view="settings" type="button">返回商家設定</button>
         <div class="section-heading"><div><p class="eyebrow">CHANNEL SETUP</p><h2>連接 LINE 官方帳號</h2><p class="muted">敏感憑證會由後端加密保存，頁面不會再次顯示。</p></div></div>
         <p id="line-setup-status" class="setup-status" aria-live="polite">正在確認 LINE 設定狀態</p>
         <ol class="setup-steps" aria-label="LINE 設定步驟">
@@ -330,7 +346,10 @@
           </article>
         </div>
 
-        <div class="section-heading booking-settings-heading">
+      </section>
+
+      <section id="view-services" class="view hidden">
+        <div class="section-heading">
           <div>
             <p class="eyebrow">BOOKING CATALOG</p>
             <h2>預約服務與加購</h2>

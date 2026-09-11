@@ -274,12 +274,12 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-
   .app-shell { grid-template-columns: 1fr; }
   .sidebar { position: fixed; inset: auto 0 0; z-index: 10; height: auto; padding: 10px 10px calc(10px + env(safe-area-inset-bottom)); }
   .logo, .sidebar-foot { display: none; }
-  .sidebar nav { grid-template-columns: repeat(5, 1fr); margin: 0; gap: 4px; }
+  .sidebar nav { grid-template-columns: repeat(3, 1fr); margin: 0; gap: 4px; }
   .nav-item { display: grid; min-height: 58px; justify-items: center; gap: 4px; padding: 7px 3px; border-radius: 10px; font-size: 11px; }
   .nav-item svg { width: 19px; height: 19px; }
   .nav-item .nav-label { font-size: 11px; }
   .nav-item.active { box-shadow: inset 0 3px var(--lime); }
-  .workspace { padding: 24px 18px calc(112px + env(safe-area-inset-bottom)); }
+  .workspace { padding: 24px 18px calc(174px + env(safe-area-inset-bottom)); }
   .topbar, .section-heading { align-items: flex-start; flex-direction: column; }
   .topbar { margin-bottom: 24px; }
   .topbar-status { align-self: flex-start; }
