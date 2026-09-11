@@ -234,6 +234,28 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-
 .channel-health.off .health-indicator { background: var(--warning); }
 .health-status p { margin: 3px 0 0; color: var(--muted); font-size: 12px; line-height: 1.5; }
 
+/* Booking catalog */
+.booking-settings-heading { margin-top: 54px; }
+.booking-catalog-lists { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+.option-fieldset { min-width: 0; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 14px; }
+.option-fieldset legend { padding: 0 6px; color: var(--ink); font-size: 13px; font-weight: 800; }
+.option-checks { display: grid; gap: 8px; }
+.option-check { display: flex; min-height: 44px; align-items: center; gap: 9px; margin: 0; padding: 9px 11px; border-radius: 10px; background: #f4f7f4; cursor: pointer; }
+.option-check input { width: 18px; height: 18px; margin: 0; accent-color: var(--green); }
+.catalog-list { display: grid; gap: 12px; }
+.catalog-item { padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.catalog-item.inactive { background: #f4f5f2; opacity: .78; }
+.catalog-item summary { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 14px; cursor: pointer; list-style: none; }
+.catalog-item summary::-webkit-details-marker { display: none; }
+.catalog-title { display: grid; gap: 4px; }
+.catalog-title small { color: var(--muted); font-size: 12px; font-weight: 600; }
+.catalog-status { flex: 0 0 auto; padding: 5px 8px; border-radius: 999px; background: var(--mint); color: var(--green); font-size: 11px; font-weight: 800; }
+.catalog-item.inactive .catalog-status { background: #e5e6e2; color: var(--muted); }
+.catalog-edit { display: grid; gap: 12px; margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); }
+.catalog-edit label { margin: 0; }
+.catalog-meta { font-variant-numeric: tabular-nums; }
+.catalog-empty { padding: 24px 12px; color: var(--muted); text-align: center; line-height: 1.6; }
+
 @media (max-width: 1050px) {
   .hero-grid { grid-template-columns: 1fr 1fr; }
   .progress-card { grid-column: 1 / -1; }
@@ -241,6 +263,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-
   .content-grid, .tester-grid { grid-template-columns: 1fr; }
   .metric-grid { grid-template-columns: 1fr 1fr; }
   .overview-grid { grid-template-columns: 1fr; }
+  .booking-catalog-lists { grid-template-columns: 1fr; }
   .readiness-panel .checklist { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 760px) {

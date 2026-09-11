@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="referrer" content="no-referrer">
   <title>LINE 預約</title>
-  <link rel="stylesheet" href="/booking/styles.css?v=20260731">
+  <link rel="stylesheet" href="/booking/styles.css?v=20260902">
   <script src="/shared/ui-utils.js?v=20260731" defer></script>
 </head>
 <body>
@@ -21,8 +21,20 @@
 
     <section class="step active" data-step="0">
       <p class="step-label">步驟 1／4</p>
-      <h2 tabindex="-1">選擇服務</h2>
+      <h2 tabindex="-1">選擇服務與加購</h2>
       <div id="services" class="choice-list"></div>
+      <div id="add-on-section" class="add-on-section" hidden>
+        <div class="add-on-heading">
+          <div><h3>加購項目</h3><p id="add-on-help" class="muted">可複選，也可以不加購。</p></div>
+          <span class="optional-badge">選填</span>
+        </div>
+        <div id="add-ons" class="choice-list"></div>
+        <dl class="quote" aria-live="polite">
+          <div><dt>預估時間</dt><dd id="selection-duration">—</dd></div>
+          <div><dt>預估費用</dt><dd id="selection-price">—</dd></div>
+        </dl>
+        <button id="continue-to-time" class="primary" type="button">選擇預約時間</button>
+      </div>
     </section>
 
     <section class="step" data-step="1">
@@ -41,9 +53,11 @@
       <h2 tabindex="-1">確認預約內容</h2>
       <dl class="summary">
         <dt>服務</dt><dd id="summary-service"></dd>
+        <dt>加購</dt><dd id="summary-add-ons"></dd>
         <dt>日期</dt><dd id="summary-date"></dd>
         <dt>時間</dt><dd id="summary-time"></dd>
         <dt>所需時間</dt><dd id="summary-duration"></dd>
+        <dt>預估費用</dt><dd id="summary-price"></dd>
       </dl>
       <label for="customer-name">預約姓名</label>
       <input id="customer-name" maxlength="160" autocomplete="name" placeholder="請輸入現場使用的姓名" required>
@@ -65,6 +79,6 @@
     </section>
     <div id="notice" class="notice" role="status" aria-live="polite"></div>
   </main>
-  <script src="/booking/app.js?v=20260731" defer></script>
+  <script src="/booking/app.js?v=20260902" defer></script>
 </body>
 </html>

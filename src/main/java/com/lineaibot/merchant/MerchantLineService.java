@@ -194,7 +194,7 @@ public class MerchantLineService {
                 .append("\n")
                 .append(item.customerName())
                 .append("｜")
-                .append(item.serviceName())
+                .append(selectionLabel(item))
                 .append("\n編號：")
                 .append(shortId(item.id())));
         if (active.size() > 10) {
@@ -231,7 +231,7 @@ public class MerchantLineService {
                 + "\n"
                 + reservation.customerName()
                 + "｜"
-                + reservation.serviceName();
+                + selectionLabel(reservation);
         return List.of(withQuickReply(
                 text,
                 List.of(postbackItem(
@@ -346,6 +346,17 @@ public class MerchantLineService {
 
     private String shortName(String name) {
         return name.substring(0, Math.min(name.length(), 6));
+    }
+
+    private String selectionLabel(MerchantDtos.ReservationSummary reservation) {
+        if (reservation.addOns().isEmpty()) {
+            return reservation.serviceName();
+        }
+        return reservation.serviceName()
+                + "＋"
+                + reservation.addOns().stream()
+                        .map(com.lineaibot.booking.BookingDtos.ReservationAddOnRead::name)
+                        .collect(java.util.stream.Collectors.joining("＋"));
     }
 
     private String timeOnly(java.time.Instant instant, ZoneId zone) {

@@ -36,6 +36,8 @@ async function readJson(request) {
 
 let portalDocuments;
 let portalStaff;
+let portalBookingServices;
+let portalBookingAddOns;
 let portalHasDraft;
 let portalActiveVersion;
 let portalSessionExpired;
@@ -73,6 +75,25 @@ function resetPortalFixture() {
     daily_summary_time: "08:00:00",
     created_at: "2026-07-30T02:00:00Z",
   }];
+  portalBookingAddOns = [{
+    id: "add-on-1",
+    tenant_id: "tenant-demo",
+    name: "護髮",
+    description: "增加保濕護理",
+    duration_minutes: 60,
+    price_amount: 500,
+    active: true,
+  }];
+  portalBookingServices = [{
+    id: "service-1",
+    tenant_id: "tenant-demo",
+    name: "洗頭",
+    description: "基礎洗髮服務",
+    duration_minutes: 60,
+    price_amount: 300,
+    active: true,
+    add_ons: [portalBookingAddOns[0]],
+  }];
 }
 
 resetPortalFixture();
@@ -82,7 +103,13 @@ function portalApi(url, request, response) {
   if (!pathname.startsWith("/portal/api/")) return false;
   const endpoint = pathname.slice("/portal/api".length);
   const authenticated = (request.headers.cookie || "").includes("portal-e2e=1");
-  const tenant = { id: "tenant-demo", name: "暖心咖啡", slug: "demo" };
+  const tenant = {
+    id: "tenant-demo",
+    name: "暖心咖啡",
+    slug: "demo",
+    timezone: "Asia/Taipei",
+    slot_minutes: 60,
+  };
 
   if (endpoint === "/line-session" && request.method === "POST") {
     resetPortalFixture();
@@ -125,6 +152,8 @@ function portalApi(url, request, response) {
         webhook_url: "https://example.test/webhooks/line/demo",
       },
       business_hours: [{ active: true }],
+      booking_services: portalBookingServices,
+      booking_add_ons: portalBookingAddOns,
       datasets: portalHasDraft
         ? [{
           id: "dataset-draft",
@@ -196,6 +225,59 @@ function portalApi(url, request, response) {
   }
   if (endpoint === "/documents" && request.method === "GET") {
     sendJson(response, 200, portalDocuments);
+    return true;
+  }
+  if (endpoint === "/booking-add-ons" && request.method === "POST") {
+    readJson(request).then((body) => {
+      const addOn = {
+        id: `add-on-${portalBookingAddOns.length + 1}`,
+        tenant_id: tenant.id,
+        ...body,
+        active: true,
+      };
+      portalBookingAddOns.push(addOn);
+      sendJson(response, 201, addOn);
+    });
+    return true;
+  }
+  if (endpoint.startsWith("/booking-add-ons/") && request.method === "PUT") {
+    readJson(request).then((body) => {
+      const addOn = portalBookingAddOns.find(
+        (item) => item.id === endpoint.slice("/booking-add-ons/".length)
+      );
+      Object.assign(addOn, body);
+      sendJson(response, 200, addOn);
+    });
+    return true;
+  }
+  if (endpoint === "/booking-services" && request.method === "POST") {
+    readJson(request).then((body) => {
+      const service = {
+        id: `service-${portalBookingServices.length + 1}`,
+        tenant_id: tenant.id,
+        name: body.name,
+        description: body.description,
+        duration_minutes: body.duration_minutes,
+        price_amount: body.price_amount,
+        active: true,
+        add_ons: portalBookingAddOns.filter((item) => body.add_on_ids.includes(item.id)),
+      };
+      portalBookingServices.push(service);
+      sendJson(response, 201, service);
+    });
+    return true;
+  }
+  if (endpoint.startsWith("/booking-services/") && request.method === "PUT") {
+    readJson(request).then((body) => {
+      const service = portalBookingServices.find(
+        (item) => item.id === endpoint.slice("/booking-services/".length)
+      );
+      Object.assign(service, body, {
+        add_ons: portalBookingAddOns.filter((item) => body.add_on_ids.includes(item.id)),
+      });
+      delete service.add_on_ids;
+      sendJson(response, 200, service);
+    });
     return true;
   }
   if (endpoint === "/documents" && request.method === "POST") {
@@ -273,7 +355,21 @@ function bookingApi(pathname, url, request, response) {
       tenant_name: "測試店家",
       timezone: "Asia/Taipei",
       slot_minutes: 60,
-      services: [{ id: "service-1", name: "基礎服務", description: "約 60 分鐘" }],
+      currency: "TWD",
+      services: [{
+        id: "service-1",
+        name: "洗頭",
+        description: "基礎洗髮服務",
+        duration_minutes: 60,
+        price_amount: 300,
+        add_ons: [{
+          id: "add-on-1",
+          name: "護髮",
+          description: "增加保濕護理",
+          duration_minutes: 60,
+          price_amount: 500,
+        }],
+      }],
     });
     return true;
   }
@@ -284,6 +380,9 @@ function bookingApi(pathname, url, request, response) {
       return true;
     }
     sendJson(response, 200, {
+      add_on_ids: url.searchParams.getAll("add_on_ids"),
+      duration_minutes: url.searchParams.has("add_on_ids") ? 120 : 60,
+      total_price_amount: url.searchParams.has("add_on_ids") ? 800 : 300,
       slots: [{ starts_at: slotFor(date), available: true }],
     });
     return true;
@@ -293,6 +392,12 @@ function bookingApi(pathname, url, request, response) {
       id: "reservation-1",
       starts_at: body.starts_at,
       customer_name: body.customer_name,
+      service_name: "洗頭",
+      add_ons: body.add_on_ids?.includes("add-on-1")
+        ? [{ name: "護髮", duration_minutes: 60, price_amount: 500 }]
+        : [],
+      total_duration_minutes: body.add_on_ids?.includes("add-on-1") ? 120 : 60,
+      total_price_amount: body.add_on_ids?.includes("add-on-1") ? 800 : 300,
       status: "CONFIRMED",
     }));
     return true;
@@ -335,7 +440,10 @@ function merchantApi(pathname, url, request, response) {
         reservations: [{
           id: "reservation-12345678",
           customer_name: `測試顧客 ${date}`,
-          service_name: "基礎服務",
+          service_name: "洗頭",
+          add_ons: [{ name: "護髮", duration_minutes: 60, price_amount: 500 }],
+          total_duration_minutes: 120,
+          total_price_amount: 800,
           starts_at: slotFor(date),
           status: "CONFIRMED",
         }],

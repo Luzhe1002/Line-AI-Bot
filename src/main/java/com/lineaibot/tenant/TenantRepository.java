@@ -1,6 +1,7 @@
 package com.lineaibot.tenant;
 
 import static com.lineaibot.tenant.TenantDtos.BookingServiceRead;
+import static com.lineaibot.tenant.TenantDtos.BookingAddOnRead;
 import static com.lineaibot.tenant.TenantDtos.BusinessHourRead;
 import static com.lineaibot.tenant.TenantDtos.TenantRead;
 
@@ -117,9 +118,12 @@ public class TenantRepository {
     public void insertDefaultBookingService(String id, String tenantId, Instant createdAt) {
         jdbc.sql("""
                         insert into booking_services (
-                            id, tenant_id, name, description, active, created_at
+                            id, tenant_id, name, description, duration_minutes,
+                            price_amount, active, created_at, updated_at
                         ) values (
-                            :id, :tenantId, '一般預約', '預設的一對一預約服務', true, :createdAt
+                            :id, :tenantId, '一般預約', '預設的一對一預約服務',
+                            (select slot_minutes from tenants where id = :tenantId),
+                            0, true, :createdAt, :createdAt
                         )
                         """)
                 .param("id", id)
@@ -258,36 +262,251 @@ public class TenantRepository {
     }
 
     public BookingServiceRead insertBookingService(
-            String tenantId, String name, String description, Instant now) {
+            String tenantId,
+            String name,
+            String description,
+            int durationMinutes,
+            int priceAmount,
+            List<String> addOnIds,
+            Instant now) {
         String id = java.util.UUID.randomUUID().toString();
         jdbc.sql("""
                         insert into booking_services (
-                            id, tenant_id, name, description, active, created_at
-                        ) values (:id, :tenantId, :name, :description, true, :createdAt)
+                            id, tenant_id, name, description, duration_minutes,
+                            price_amount, active, created_at, updated_at
+                        ) values (
+                            :id, :tenantId, :name, :description, :durationMinutes,
+                            :priceAmount, true, :createdAt, :createdAt
+                        )
                         """)
                 .param("id", id)
                 .param("tenantId", tenantId)
                 .param("name", name)
                 .param("description", description)
+                .param("durationMinutes", durationMinutes)
+                .param("priceAmount", priceAmount)
                 .param("createdAt", utc(now))
                 .update();
-        return new BookingServiceRead(id, tenantId, name, description, true);
+        replaceBookingServiceAddOns(tenantId, id, addOnIds, now);
+        return findBookingService(tenantId, id).orElseThrow();
+    }
+
+    public BookingServiceRead updateBookingService(
+            String tenantId,
+            String serviceId,
+            String name,
+            String description,
+            int durationMinutes,
+            int priceAmount,
+            boolean active,
+            List<String> addOnIds,
+            Instant now) {
+        jdbc.sql("""
+                        update booking_services
+                        set name = :name,
+                            description = :description,
+                            duration_minutes = :durationMinutes,
+                            price_amount = :priceAmount,
+                            active = :active,
+                            updated_at = :updatedAt
+                        where id = :serviceId and tenant_id = :tenantId
+                        """)
+                .param("name", name)
+                .param("description", description)
+                .param("durationMinutes", durationMinutes)
+                .param("priceAmount", priceAmount)
+                .param("active", active)
+                .param("updatedAt", utc(now))
+                .param("serviceId", serviceId)
+                .param("tenantId", tenantId)
+                .update();
+        replaceBookingServiceAddOns(tenantId, serviceId, addOnIds, now);
+        return findBookingService(tenantId, serviceId).orElseThrow();
+    }
+
+    public Optional<BookingServiceRead> findBookingService(String tenantId, String serviceId) {
+        return jdbc.sql("""
+                        select id, tenant_id, name, description, duration_minutes,
+                               price_amount, active
+                        from booking_services
+                        where id = :serviceId and tenant_id = :tenantId
+                        """)
+                .param("serviceId", serviceId)
+                .param("tenantId", tenantId)
+                .query((rs, rowNum) -> mapBookingService(rs))
+                .optional()
+                .map(this::withAddOns);
     }
 
     public List<BookingServiceRead> findBookingServices(String tenantId) {
         return jdbc.sql("""
-                        select id, tenant_id, name, description, active
+                        select id, tenant_id, name, description, duration_minutes,
+                               price_amount, active
                         from booking_services
                         where tenant_id = :tenantId order by created_at
                         """)
                 .param("tenantId", tenantId)
-                .query((rs, rowNum) -> new BookingServiceRead(
-                        rs.getString("id"),
-                        rs.getString("tenant_id"),
-                        rs.getString("name"),
-                        rs.getString("description"),
-                        rs.getBoolean("active")))
+                .query((rs, rowNum) -> mapBookingService(rs))
+                .list()
+                .stream()
+                .map(this::withAddOns)
+                .toList();
+    }
+
+    public BookingAddOnRead insertBookingAddOn(
+            String tenantId,
+            String name,
+            String description,
+            int durationMinutes,
+            int priceAmount,
+            Instant now) {
+        String id = java.util.UUID.randomUUID().toString();
+        jdbc.sql("""
+                        insert into booking_add_ons (
+                            id, tenant_id, name, description, duration_minutes,
+                            price_amount, active, created_at, updated_at
+                        ) values (
+                            :id, :tenantId, :name, :description, :durationMinutes,
+                            :priceAmount, true, :createdAt, :createdAt
+                        )
+                        """)
+                .param("id", id)
+                .param("tenantId", tenantId)
+                .param("name", name)
+                .param("description", description)
+                .param("durationMinutes", durationMinutes)
+                .param("priceAmount", priceAmount)
+                .param("createdAt", utc(now))
+                .update();
+        return findBookingAddOn(tenantId, id).orElseThrow();
+    }
+
+    public BookingAddOnRead updateBookingAddOn(
+            String tenantId,
+            String addOnId,
+            String name,
+            String description,
+            int durationMinutes,
+            int priceAmount,
+            boolean active,
+            Instant now) {
+        jdbc.sql("""
+                        update booking_add_ons
+                        set name = :name,
+                            description = :description,
+                            duration_minutes = :durationMinutes,
+                            price_amount = :priceAmount,
+                            active = :active,
+                            updated_at = :updatedAt
+                        where id = :addOnId and tenant_id = :tenantId
+                        """)
+                .param("name", name)
+                .param("description", description)
+                .param("durationMinutes", durationMinutes)
+                .param("priceAmount", priceAmount)
+                .param("active", active)
+                .param("updatedAt", utc(now))
+                .param("addOnId", addOnId)
+                .param("tenantId", tenantId)
+                .update();
+        return findBookingAddOn(tenantId, addOnId).orElseThrow();
+    }
+
+    public Optional<BookingAddOnRead> findBookingAddOn(String tenantId, String addOnId) {
+        return jdbc.sql("""
+                        select id, tenant_id, name, description, duration_minutes,
+                               price_amount, active
+                        from booking_add_ons
+                        where id = :addOnId and tenant_id = :tenantId
+                        """)
+                .param("addOnId", addOnId)
+                .param("tenantId", tenantId)
+                .query((rs, rowNum) -> mapBookingAddOn(rs))
+                .optional();
+    }
+
+    public List<BookingAddOnRead> findBookingAddOns(String tenantId) {
+        return jdbc.sql("""
+                        select id, tenant_id, name, description, duration_minutes,
+                               price_amount, active
+                        from booking_add_ons
+                        where tenant_id = :tenantId
+                        order by created_at
+                        """)
+                .param("tenantId", tenantId)
+                .query((rs, rowNum) -> mapBookingAddOn(rs))
                 .list();
+    }
+
+    private void replaceBookingServiceAddOns(
+            String tenantId, String serviceId, List<String> addOnIds, Instant now) {
+        jdbc.sql("""
+                        delete from booking_service_add_ons
+                        where tenant_id = :tenantId and service_id = :serviceId
+                        """)
+                .param("tenantId", tenantId)
+                .param("serviceId", serviceId)
+                .update();
+        for (String addOnId : addOnIds) {
+            jdbc.sql("""
+                            insert into booking_service_add_ons (
+                                tenant_id, service_id, add_on_id, created_at
+                            ) values (:tenantId, :serviceId, :addOnId, :createdAt)
+                            """)
+                    .param("tenantId", tenantId)
+                    .param("serviceId", serviceId)
+                    .param("addOnId", addOnId)
+                    .param("createdAt", utc(now))
+                    .update();
+        }
+    }
+
+    private BookingServiceRead withAddOns(BookingServiceRead service) {
+        List<BookingAddOnRead> addOns = jdbc.sql("""
+                        select a.id, a.tenant_id, a.name, a.description,
+                               a.duration_minutes, a.price_amount, a.active
+                        from booking_service_add_ons sa
+                        join booking_add_ons a
+                          on a.id = sa.add_on_id and a.tenant_id = sa.tenant_id
+                        where sa.tenant_id = :tenantId and sa.service_id = :serviceId
+                        order by a.created_at
+                        """)
+                .param("tenantId", service.tenantId())
+                .param("serviceId", service.id())
+                .query((rs, rowNum) -> mapBookingAddOn(rs))
+                .list();
+        return new BookingServiceRead(
+                service.id(),
+                service.tenantId(),
+                service.name(),
+                service.description(),
+                service.durationMinutes(),
+                service.priceAmount(),
+                service.active(),
+                addOns);
+    }
+
+    private BookingServiceRead mapBookingService(ResultSet rs) throws SQLException {
+        return new BookingServiceRead(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("name"),
+                rs.getString("description"),
+                rs.getInt("duration_minutes"),
+                rs.getInt("price_amount"),
+                rs.getBoolean("active"),
+                List.of());
+    }
+
+    private BookingAddOnRead mapBookingAddOn(ResultSet rs) throws SQLException {
+        return new BookingAddOnRead(
+                rs.getString("id"),
+                rs.getString("tenant_id"),
+                rs.getString("name"),
+                rs.getString("description"),
+                rs.getInt("duration_minutes"),
+                rs.getInt("price_amount"),
+                rs.getBoolean("active"));
     }
 
     private TenantRow mapTenant(ResultSet rs, int rowNum) throws SQLException {

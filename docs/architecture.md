@@ -81,17 +81,23 @@ flowchart LR
 - 頁面顯示的時段僅供選擇；確認時仍由 `BookingManager` 重新驗證並建立預約。
 - 時段衝突回傳 `409`，頁面保留服務及日期並重新載入可用時段。
 
-- 商家設定固定 `slot_minutes`。
-- 開始時間必須在未來、落在該日營業時間內，且對齊時段。
+- 商家設定固定 `slot_minutes`，作為可預約開始時間與占用紀錄的最小粒度。
+- 主服務及加購可各自設定時間與價格；時間必須是 `slot_minutes` 的倍數。後端依服務允許清單重新計價，不信任前端傳入的顯示結果。
+- 開始時間必須在未來、整段服務落在該日營業時間內，且對齊時段。
 - `tenant_id + idempotency_key` 防止相同請求重複建立。
 - 有效預約把 `starts_at` 寫入 `active_slot_key`；`tenant_id + active_slot_key` 是唯一限制。
 - 取消時將 `active_slot_key` 設為 `NULL`，同時段可以再次預約。
 - `ReservationWriter` 使用獨立交易，唯一鍵衝突後主流程仍能查回既有冪等結果。
 - LINE Postback 以 `webhookEventId` 形成預約冪等鍵。
 - `booking_slot_occupancies` 以 `tenant_id + starts_at` 統一保護有效預約與
-  店家封鎖時段；建立預約或封鎖時都在同一交易取得時段占用。
+  店家封鎖時段；長時服務會在同一交易取得所有涵蓋的離散時段，因此「洗頭＋護髮」
+  不會只鎖定第一個開始時間。
+- 預約保存主服務名稱、加購名稱、總時間與總價格快照；商家日後改價或停用項目，
+  不會改寫既有預約內容。
 
-未來支援多員工、多房間或非固定時長時，唯一資源需擴充成 `resource_id`，並在 PostgreSQL 使用 Range Exclusion Constraint 防止區間重疊。
+未來支援多員工或多房間時，唯一資源需擴充成 `resource_id`；若允許非
+`slot_minutes` 倍數的任意時長，則應在 PostgreSQL 使用 Range Exclusion
+Constraint 防止區間重疊。
 
 ## 店家 LINE 預約管理
 

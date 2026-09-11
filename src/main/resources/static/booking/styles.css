@@ -51,7 +51,23 @@ h2 { margin: 0 0 18px; font-size: 23px; }
 .service { display: grid; gap: 5px; }
 .service strong { font-size: 17px; }
 .service small { color: var(--muted); }
-.service:hover, .slot:hover { border-color: var(--green); background: var(--soft); }
+.service:hover, .slot:hover, .service.selected { border-color: var(--green); background: var(--soft); }
+.service.selected { box-shadow: inset 0 0 0 1px var(--green); }
+.add-on-section { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--line); }
+.add-on-section[hidden] { display: none; }
+.add-on-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.add-on-heading h3 { margin: 0 0 4px; font-size: 18px; }
+.add-on-heading p { margin: 0; font-size: 13px; }
+.optional-badge { padding: 5px 9px; border-radius: 999px; background: var(--soft); color: var(--green); font-size: 12px; font-weight: 700; }
+.add-on-choice { display: grid; grid-template-columns: auto 1fr; min-height: 56px; gap: 12px; align-items: center; margin: 0; padding: 13px 14px; border: 1px solid var(--line); border-radius: 14px; cursor: pointer; }
+.add-on-choice:hover, .add-on-choice.selected { border-color: var(--green); background: var(--soft); }
+.add-on-choice input { width: 20px; height: 20px; margin: 0; accent-color: var(--green); }
+.add-on-choice span { display: grid; gap: 3px; }
+.add-on-choice small { color: var(--muted); font-weight: 500; }
+.quote { display: grid; gap: 8px; margin: 18px 0 8px; padding: 14px; border-radius: 12px; background: var(--soft); }
+.quote div { display: flex; justify-content: space-between; gap: 16px; }
+.quote dd { margin: 0; font-weight: 700; font-variant-numeric: tabular-nums; }
+.quote dt { color: var(--muted); }
 label, .field-label { display: block; margin: 20px 0 8px; font-size: 14px; font-weight: 700; }
 input {
   width: 100%;
