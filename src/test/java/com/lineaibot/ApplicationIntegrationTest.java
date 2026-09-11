@@ -571,122 +571,6 @@ class ApplicationIntegrationTest {
     }
 
     @Test
-    void bookingAddOnsChangePriceDurationAndReserveEveryCoveredSlot() throws Exception {
-        Tenant tenant = createTenant("booking-add-ons");
-        JsonNode addOn = json(mvc.perform(post(
-                                "/api/v1/tenants/{tenantId}/booking-add-ons", tenant.id())
-                        .header("X-Tenant-Api-Key", tenant.apiKey())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "name": "護髮",
-                                  "description": "深層護髮",
-                                  "duration_minutes": 60,
-                                  "price_amount": 500
-                                }
-                                """))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.active").value(true))
-                .andReturn());
-        String addOnId = addOn.path("id").asText();
-
-        JsonNode service = json(mvc.perform(post(
-                                "/api/v1/tenants/{tenantId}/booking-services", tenant.id())
-                        .header("X-Tenant-Api-Key", tenant.apiKey())
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "name": "洗頭",
-                                  "description": "基礎洗髮服務",
-                                  "duration_minutes": 60,
-                                  "price_amount": 300,
-                                  "add_on_ids": ["%s"]
-                                }
-                                """.formatted(addOnId)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.duration_minutes").value(60))
-                .andExpect(jsonPath("$.price_amount").value(300))
-                .andExpect(jsonPath("$.add_ons[0].id").value(addOnId))
-                .andReturn());
-        String serviceId = service.path("id").asText();
-
-        String token = bookingAccessTokens.issue(tenant.id(), tenant.slug(), "U-add-on-customer");
-        String authorization = "Bearer " + token;
-        JsonNode bootstrap = json(mvc.perform(get(
-                                "/booking/api/{tenantSlug}/bootstrap", tenant.slug())
-                        .header("Authorization", authorization))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.currency").value("TWD"))
-                .andReturn());
-        JsonNode publicService = textValues(bootstrap.path("services"), "id").stream()
-                .anyMatch(serviceId::equals)
-                ? java.util.stream.StreamSupport.stream(
-                                bootstrap.path("services").spliterator(), false)
-                        .filter(item -> serviceId.equals(item.path("id").asText()))
-                        .findFirst()
-                        .orElseThrow()
-                : null;
-        assertThat(publicService).isNotNull();
-        assertThat(publicService.path("add_ons").get(0).path("name").asText())
-                .isEqualTo("護髮");
-
-        Instant startsAt = nextBusinessSlot();
-        LocalDate localDate = startsAt.atZone(ZoneId.of("Asia/Taipei")).toLocalDate();
-        mvc.perform(get("/booking/api/{tenantSlug}/availability", tenant.slug())
-                        .header("Authorization", authorization)
-                        .queryParam("service_id", serviceId)
-                        .queryParam("add_on_ids", addOnId)
-                        .queryParam("local_date", localDate.toString()))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.duration_minutes").value(120))
-                .andExpect(jsonPath("$.total_price_amount").value(800));
-
-        mvc.perform(post("/booking/api/{tenantSlug}/reservations", tenant.slug())
-                        .header("Authorization", authorization)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "service_id": "%s",
-                                  "add_on_ids": ["%s"],
-                                  "starts_at": "%s",
-                                  "customer_name": "加購顧客",
-                                  "idempotency_key": "booking-add-on-idempotency-0001"
-                                }
-                                """.formatted(serviceId, addOnId, startsAt)))
-                .andExpect(status().isCreated())
-                .andExpect(jsonPath("$.service_name").value("洗頭"))
-                .andExpect(jsonPath("$.add_ons[0].name").value("護髮"))
-                .andExpect(jsonPath("$.total_duration_minutes").value(120))
-                .andExpect(jsonPath("$.total_price_amount").value(800))
-                .andExpect(jsonPath("$.ends_at").value(startsAt.plusSeconds(7200).toString()));
-
-        long occupancies = jdbc.sql("""
-                        select count(*) from booking_slot_occupancies
-                        where tenant_id = :tenantId
-                          and occupancy_type = 'RESERVATION'
-                          and reference_id = (
-                              select id from reservations
-                              where tenant_id = :tenantId
-                                and idempotency_key = 'booking-add-on-idempotency-0001'
-                          )
-                        """)
-                .param("tenantId", tenant.id())
-                .query(Long.class)
-                .single();
-        assertThat(occupancies).isEqualTo(2);
-
-        JsonNode availableAfterBooking = json(mvc.perform(get(
-                                "/booking/api/{tenantSlug}/availability", tenant.slug())
-                        .header("Authorization", authorization)
-                        .queryParam("service_id", serviceId)
-                        .queryParam("local_date", localDate.toString()))
-                .andExpect(status().isOk())
-                .andReturn());
-        assertThat(textValues(availableAfterBooking.path("slots"), "starts_at"))
-                .doesNotContain(startsAt.toString(), startsAt.plusSeconds(3600).toString());
-    }
-
-    @Test
     void knowledgeRetrievalNeverCrossesTenantBoundary() throws Exception {
         Tenant firstTenant = createTenant("knowledge-a");
         Tenant secondTenant = createTenant("knowledge-b");
@@ -1074,12 +958,6 @@ class ApplicationIntegrationTest {
         assertThat(array.isArray()).isTrue();
         assertThat(array.size()).isPositive();
         return array.get(0).path("id").asText();
-    }
-
-    private java.util.List<String> textValues(JsonNode array, String field) {
-        return java.util.stream.StreamSupport.stream(array.spliterator(), false)
-                .map(item -> item.path(field).asText())
-                .toList();
     }
 
     private Instant nextBusinessSlot() {

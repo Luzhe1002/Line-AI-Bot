@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css?v=20260902">
+  <link rel="stylesheet" href="/portal/styles.css?v=20260731-3">
   <script src="/shared/ui-utils.js?v=20260731-3" defer></script>
-  <script src="/portal/app.js?v=20260902" defer></script>
+  <script src="/portal/app.js?v=20260731-4" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -95,7 +95,7 @@
         </button>
         <button class="nav-item" data-view="settings" type="button">
           <svg aria-hidden="true" viewBox="0 0 24 24"><path d="M8 4h8M6 8h12M4 12h16M6 16h12M8 20h8"/><circle cx="12" cy="12" r="3"/></svg>
-          <span class="nav-label">商家設定</span>
+          <span class="nav-label">LINE 設定</span>
         </button>
       </nav>
       <div class="sidebar-foot">
@@ -191,7 +191,7 @@
               <button class="quick-action" data-go-view="knowledge" type="button"><span>01</span><strong>新增客服知識</strong><small>建立或編輯可信內容</small></button>
               <button class="quick-action" data-go-view="tester" type="button"><span>02</span><strong>測試 AI 回答</strong><small>發布前確認語氣與引用</small></button>
               <button class="quick-action" data-go-view="staff" type="button"><span>03</span><strong>管理店家人員</strong><small>設定角色與 LINE 選單</small></button>
-              <button class="quick-action" data-go-view="settings" type="button"><span>04</span><strong>管理服務與 LINE</strong><small>設定加購、時間、價格與 Webhook</small></button>
+              <button class="quick-action" data-go-view="settings" type="button"><span>04</span><strong>檢查 LINE 設定</strong><small>確認憑證與 Webhook</small></button>
             </div>
           </aside>
         </div>
@@ -249,7 +249,6 @@
             <p class="muted">有可靠資料才回答；資料不足時應轉接人工客服。</p>
           </article>
         </div>
-
       </section>
 
       <section id="view-staff" class="view hidden">
@@ -328,50 +327,6 @@
               <div><strong id="channel-health-title">尚未讀取設定</strong><p id="line-status">正在確認 LINE Channel 狀態。</p></div>
             </div>
           </article>
-        </div>
-
-        <div class="section-heading booking-settings-heading">
-          <div>
-            <p class="eyebrow">BOOKING CATALOG</p>
-            <h2>預約服務與加購</h2>
-            <p class="muted">先建立可重複使用的加購項目，再指定哪些主服務可以提供。時間必須符合商家的預約間隔。</p>
-          </div>
-        </div>
-        <div class="content-grid booking-catalog-grid">
-          <form id="add-on-form" class="panel stack">
-            <div><p class="eyebrow">NEW ADD-ON</p><h3>新增加購項目</h3><p class="muted">例如護髮、頭皮按摩；可設定增加時間與費用。</p></div>
-            <label>加購名稱<input name="name" required maxlength="160" placeholder="例如：護髮"></label>
-            <label>說明（選填）<textarea name="description" maxlength="2000" rows="3"></textarea></label>
-            <div class="two-col">
-              <label>增加時間（分鐘）<input name="duration_minutes" type="number" min="0" max="1440" required></label>
-              <label>增加費用（NT$）<input name="price_amount" type="number" min="0" required value="0"></label>
-            </div>
-            <button class="primary" type="submit">新增加購</button>
-          </form>
-          <form id="booking-service-form" class="panel stack">
-            <div><p class="eyebrow">NEW SERVICE</p><h3>新增主服務</h3><p class="muted">主服務決定基本時間與價格，再搭配下方加購。</p></div>
-            <label>服務名稱<input name="name" required maxlength="160" placeholder="例如：洗頭"></label>
-            <label>說明（選填）<textarea name="description" maxlength="2000" rows="3"></textarea></label>
-            <div class="two-col">
-              <label>基本時間（分鐘）<input name="duration_minutes" type="number" min="1" max="1440" required></label>
-              <label>基本價格（NT$）<input name="price_amount" type="number" min="0" required value="0"></label>
-            </div>
-            <fieldset class="option-fieldset">
-              <legend>可提供的加購</legend>
-              <div id="service-add-on-options" class="option-checks"></div>
-            </fieldset>
-            <button class="primary" type="submit">新增主服務</button>
-          </form>
-        </div>
-        <div class="booking-catalog-lists">
-          <section class="panel">
-            <div class="panel-head"><div><p class="eyebrow">SERVICES</p><h3>主服務</h3></div></div>
-            <div id="booking-service-list" class="catalog-list"></div>
-          </section>
-          <section class="panel">
-            <div class="panel-head"><div><p class="eyebrow">ADD-ONS</p><h3>加購項目</h3></div></div>
-            <div id="booking-add-on-list" class="catalog-list"></div>
-          </section>
         </div>
       </section>
     </main>

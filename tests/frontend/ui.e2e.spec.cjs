@@ -137,34 +137,11 @@ test("expired portal sessions return to login with localized guidance", async ({
 
 test("connected LINE channel marks every setup step complete", async ({ page }) => {
   await page.goto("/portal/#token=e2e-token");
-  await page.getByRole("button", { name: "商家設定", exact: true }).click();
+  await page.getByRole("button", { name: "LINE 設定", exact: true }).click();
 
   await expect(page.locator(".setup-steps li.done")).toHaveCount(3);
   await expect(page.locator(".setup-steps li.active")).toHaveCount(0);
   await expect(page.locator("#line-setup-status")).toContainText("LINE 設定已完成");
-});
-
-test("merchant can create a reusable add-on and attach it to a service", async ({ page }) => {
-  await page.goto("/portal/#token=e2e-token");
-  await page.getByRole("button", { name: "商家設定", exact: true }).click();
-
-  const addOnForm = page.locator("#add-on-form");
-  await addOnForm.getByLabel("加購名稱").fill("頭皮按摩");
-  await addOnForm.getByLabel("增加時間（分鐘）").fill("60");
-  await addOnForm.getByLabel("增加費用（NT$）").fill("200");
-  await addOnForm.getByRole("button", { name: "新增加購" }).click();
-  await expect(page.locator("#booking-add-on-list")).toContainText("頭皮按摩");
-
-  const serviceForm = page.locator("#booking-service-form");
-  await serviceForm.getByLabel("服務名稱").fill("頭皮洗護");
-  await serviceForm.getByLabel("基本時間（分鐘）").fill("60");
-  await serviceForm.getByLabel("基本價格（NT$）").fill("600");
-  await serviceForm.getByLabel(/頭皮按摩/).check();
-  await serviceForm.getByRole("button", { name: "新增主服務" }).click();
-
-  const created = page.locator("#booking-service-list .catalog-item")
-    .filter({ hasText: "頭皮洗護" });
-  await expect(created).toContainText("1 個加購");
 });
 
 test("portal operations dashboard stays within a 375px mobile viewport", async ({ page }) => {
@@ -188,18 +165,12 @@ test("customer booking moves focus through the complete happy path", async ({ pa
   const service = page.locator(".service");
   await expect(service).toHaveCount(1);
   await service.click();
-  await page.getByLabel(/護髮/).check();
-  await expect(page.locator("#selection-duration")).toHaveText("120 分鐘");
-  await expect(page.locator("#selection-price")).toContainText("800");
-  await page.locator("#continue-to-time").click();
   await expect(page.getByRole("heading", { name: "選擇日期與時間" })).toBeFocused();
 
   const slot = page.locator(".slot");
   await expect(slot).toHaveCount(1);
   await slot.click();
   await expect(page.getByRole("heading", { name: "確認預約內容" })).toBeFocused();
-  await expect(page.locator("#summary-add-ons")).toHaveText("護髮");
-  await expect(page.locator("#summary-price")).toContainText("800");
 
   await page.locator("#customer-name").fill("測試顧客");
   await page.locator("#confirm").click();
@@ -211,11 +182,10 @@ test("customer booking moves focus through the complete happy path", async ({ pa
 test("customer booking hides inactive steps on fatal errors and renders API text safely", async ({ page }) => {
   await page.goto("/booking/index.html");
   await expect(page.getByRole("heading", { name: "無法開啟預約頁" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "選擇服務與加購" })).toBeHidden();
+  await expect(page.getByRole("heading", { name: "選擇服務" })).toBeHidden();
 
   await page.goto("/booking/demo/#token=e2e-token");
   await page.locator(".service").click();
-  await page.locator("#continue-to-time").click();
   const date = page.locator("#booking-date");
   await date.fill("2099-12-31");
   await date.evaluate((element) => element.dispatchEvent(new Event("change", { bubbles: true })));
@@ -226,7 +196,6 @@ test("customer booking hides inactive steps on fatal errors and renders API text
 test("customer booking reloads slots when LINE WebView emits only an input event", async ({ page }) => {
   await page.goto("/booking/demo/#token=e2e-token");
   await page.locator(".service").click();
-  await page.locator("#continue-to-time").click();
 
   const availabilityRequest = page.waitForRequest((request) =>
     request.url().includes("/availability?")

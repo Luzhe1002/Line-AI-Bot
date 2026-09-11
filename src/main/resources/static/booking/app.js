@@ -8,14 +8,7 @@
     history.replaceState(null, "", `${location.pathname}${location.search}`);
   }
   const token = sessionStorage.getItem(`booking-token:${tenantSlug}`);
-  const state = {
-    bootstrap: null,
-    service: null,
-    addOnIds: new Set(),
-    date: "",
-    slot: null,
-    lastQuote: null,
-  };
+  const state = { bootstrap: null, service: null, date: "", slot: null };
   const steps = [...document.querySelectorAll(".step")];
   const progress = [...document.querySelectorAll(".progress span")];
   const progressElement = document.querySelector(".progress");
@@ -54,8 +47,8 @@
       headers: {
         "Authorization": `Bearer ${token || ""}`,
         "Content-Type": "application/json",
-        ...(options.headers || {}),
-      },
+        ...(options.headers || {})
+      }
     });
     const body = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -68,57 +61,14 @@
 
   function localDate(iso) {
     return new Intl.DateTimeFormat("zh-TW", {
-      timeZone: state.bootstrap.timezone,
-      year: "numeric",
-      month: "2-digit",
-      day: "2-digit",
+      timeZone: state.bootstrap.timezone, year: "numeric", month: "2-digit", day: "2-digit"
     }).format(new Date(iso));
   }
 
   function localTime(iso) {
     return new Intl.DateTimeFormat("zh-TW", {
-      timeZone: state.bootstrap.timezone,
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
+      timeZone: state.bootstrap.timezone, hour: "2-digit", minute: "2-digit", hour12: false
     }).format(new Date(iso));
-  }
-
-  function money(amount) {
-    return new Intl.NumberFormat("zh-TW", {
-      style: "currency",
-      currency: state.bootstrap.currency || "TWD",
-      maximumFractionDigits: 0,
-    }).format(amount || 0);
-  }
-
-  function selectedAddOns() {
-    return (state.service?.add_ons || []).filter((item) => state.addOnIds.has(item.id));
-  }
-
-  function selectionQuote() {
-    return selectedAddOns().reduce((quote, item) => ({
-      duration: quote.duration + item.duration_minutes,
-      price: quote.price + item.price_amount,
-    }), {
-      duration: state.service?.duration_minutes || 0,
-      price: state.service?.price_amount || 0,
-    });
-  }
-
-  function updateSelectionQuote() {
-    const quote = selectionQuote();
-    document.querySelector("#selection-duration").textContent = `${quote.duration} 分鐘`;
-    document.querySelector("#selection-price").textContent = money(quote.price);
-  }
-
-  function availabilityPath() {
-    const params = new URLSearchParams({
-      service_id: state.service.id,
-      local_date: state.date,
-    });
-    state.addOnIds.forEach((id) => params.append("add_on_ids", id));
-    return `/availability?${params}`;
   }
 
   async function loadSlots() {
@@ -126,22 +76,17 @@
     const requestId = slotRequests.begin();
     const requestedDate = state.date;
     const serviceId = state.service.id;
-    const addOnKey = [...state.addOnIds].join(",");
     container.setAttribute("aria-busy", "true");
     renderMessage(container, "正在查詢可預約時段…");
     try {
-      const result = await api(availabilityPath());
-      if (!slotRequests.isLatest(requestId)
-          || state.date !== requestedDate
-          || state.service.id !== serviceId
-          || [...state.addOnIds].join(",") !== addOnKey) return;
-      state.lastQuote = result;
+      const result = await api(`/availability?service_id=${encodeURIComponent(serviceId)}&local_date=${requestedDate}`);
+      if (!slotRequests.isLatest(requestId) || state.date !== requestedDate || state.service.id !== serviceId) return;
       container.replaceChildren();
       if (!result.slots.length) {
-        renderMessage(container, "這天目前沒有足夠的連續時段，請選擇其他日期。");
+        renderMessage(container, "這天目前沒有可預約時段，請選擇其他日期。");
         return;
       }
-      result.slots.forEach((slot) => {
+      result.slots.forEach(slot => {
         const button = document.createElement("button");
         button.className = "slot";
         button.type = "button";
@@ -158,19 +103,10 @@
 
   function selectSlot(slot) {
     state.slot = slot;
-    const addOns = selectedAddOns();
-    const quote = state.lastQuote || {
-      duration_minutes: selectionQuote().duration,
-      total_price_amount: selectionQuote().price,
-    };
     document.querySelector("#summary-service").textContent = state.service.name;
-    document.querySelector("#summary-add-ons").textContent = addOns.length
-      ? addOns.map((item) => item.name).join("、")
-      : "無";
     document.querySelector("#summary-date").textContent = localDate(slot.starts_at);
     document.querySelector("#summary-time").textContent = localTime(slot.starts_at);
-    document.querySelector("#summary-duration").textContent = `${quote.duration_minutes} 分鐘`;
-    document.querySelector("#summary-price").textContent = money(quote.total_price_amount);
+    document.querySelector("#summary-duration").textContent = `${state.bootstrap.slot_minutes} 分鐘`;
     showStep(2);
   }
 
@@ -193,14 +129,13 @@
         method: "POST",
         body: JSON.stringify({
           service_id: state.service.id,
-          add_on_ids: [...state.addOnIds],
           starts_at: state.slot.starts_at,
           customer_name: name,
-          idempotency_key: `web:${crypto.randomUUID()}`,
-        }),
+          idempotency_key: `web:${crypto.randomUUID()}`
+        })
       });
       document.querySelector("#success-message").textContent =
-        `${localDate(reservation.starts_at)} ${localTime(reservation.starts_at)} 的「${reservation.service_name}」已預約成功。`;
+        `${localDate(reservation.starts_at)} ${localTime(reservation.starts_at)} 的「${state.service.name}」已預約成功。`;
       showStep(3);
     } catch (error) {
       if (error.status === 409) {
@@ -216,42 +151,6 @@
     }
   }
 
-  function renderAddOns(service) {
-    const container = document.querySelector("#add-ons");
-    container.replaceChildren();
-    if (!service.add_ons.length) {
-      renderMessage(container, "這項服務目前沒有加購項目。直接繼續選擇時間即可。");
-      document.querySelector("#add-on-help").textContent = "此服務無加購項目。";
-    } else {
-      document.querySelector("#add-on-help").textContent = "可複選，也可以不加購。";
-      service.add_ons.forEach((addOn) => {
-        const label = document.createElement("label");
-        label.className = "add-on-choice";
-        const checkbox = document.createElement("input");
-        checkbox.type = "checkbox";
-        checkbox.value = addOn.id;
-        checkbox.addEventListener("change", () => {
-          if (checkbox.checked) state.addOnIds.add(addOn.id);
-          else state.addOnIds.delete(addOn.id);
-          label.classList.toggle("selected", checkbox.checked);
-          state.slot = null;
-          state.lastQuote = null;
-          updateSelectionQuote();
-        });
-        const copy = document.createElement("span");
-        const title = document.createElement("strong");
-        title.textContent = addOn.name;
-        const detail = document.createElement("small");
-        detail.textContent = `${addOn.duration_minutes ? `+${addOn.duration_minutes} 分鐘` : "不增加時間"} · +${money(addOn.price_amount)}`;
-        copy.append(title, detail);
-        label.append(checkbox, copy);
-        container.appendChild(label);
-      });
-    }
-    document.querySelector("#add-on-section").hidden = false;
-    updateSelectionQuote();
-  }
-
   async function start() {
     if (!tenantSlug || !token) throw new Error("連結缺少預約憑證");
     state.bootstrap = await api("/bootstrap");
@@ -262,40 +161,27 @@
       renderMessage(services, "商家目前沒有開放預約服務。");
       return;
     }
-    state.bootstrap.services.forEach((service) => {
+    state.bootstrap.services.forEach(service => {
       const button = document.createElement("button");
       button.className = "service";
       button.type = "button";
-      button.setAttribute("aria-pressed", "false");
       const name = document.createElement("strong");
       name.textContent = service.name;
       const description = document.createElement("small");
-      description.textContent = [
-        service.description,
-        `${service.duration_minutes} 分鐘 · ${money(service.price_amount)}`,
-      ].filter(Boolean).join("｜");
+      description.textContent = service.description || `約 ${state.bootstrap.slot_minutes} 分鐘`;
       button.append(name, description);
       button.addEventListener("click", () => {
-        document.querySelectorAll(".service").forEach((item) => {
-          item.classList.remove("selected");
-          item.setAttribute("aria-pressed", "false");
-        });
-        button.classList.add("selected");
-        button.setAttribute("aria-pressed", "true");
         state.service = service;
-        state.addOnIds.clear();
-        state.slot = null;
-        state.lastQuote = null;
-        document.querySelector("#selected-service").textContent = `已選擇：${service.name}`;
+        document.querySelector("#selected-service").textContent =
+          `已選擇：${service.name}（約 ${state.bootstrap.slot_minutes} 分鐘）`;
         const dateInput = document.querySelector("#booking-date");
-        const today = new Intl.DateTimeFormat("en-CA", {
-          timeZone: state.bootstrap.timezone,
-        }).format(new Date());
+        const today = new Intl.DateTimeFormat("en-CA", { timeZone: state.bootstrap.timezone }).format(new Date());
         dateInput.min = today;
         dateInput.value = today;
         state.date = today;
-        renderAddOns(service);
-        document.querySelector("#add-on-section").scrollIntoView({ block: "nearest" });
+        state.slot = null;
+        showStep(1);
+        void loadSlots();
       });
       services.appendChild(button);
     });
@@ -315,13 +201,8 @@
   const bookingDate = document.querySelector("#booking-date");
   bookingDate.addEventListener("input", updateBookingDate);
   bookingDate.addEventListener("change", updateBookingDate);
-  document.querySelectorAll(".back").forEach((button) =>
+  document.querySelectorAll(".back").forEach(button =>
     button.addEventListener("click", () => showStep(Number(button.dataset.back))));
-  document.querySelector("#continue-to-time").addEventListener("click", () => {
-    if (!state.service) return;
-    showStep(1);
-    void loadSlots();
-  });
   document.querySelector("#confirm").addEventListener("click", confirmBooking);
   document.querySelector("#customer-name").addEventListener("input", (event) => {
     if (event.currentTarget.value.trim()) {
@@ -330,7 +211,7 @@
     }
   });
 
-  start().catch((error) => {
+  start().catch(error => {
     slotRequests.invalidate();
     document.querySelector("header").hidden = true;
     steps.forEach((step) => {

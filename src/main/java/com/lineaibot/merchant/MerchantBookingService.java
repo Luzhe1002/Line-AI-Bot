@@ -55,12 +55,9 @@ public class MerchantBookingService {
                         row.id(),
                         row.serviceId(),
                         row.serviceName(),
-                        row.addOns(),
                         blankFallback(row.customerName(), "未填姓名"),
                         row.startsAt(),
                         row.endsAt(),
-                        row.totalDurationMinutes(),
-                        row.totalPriceAmount(),
                         row.status(),
                         row.createdAt()))
                 .toList();
@@ -110,13 +107,10 @@ public class MerchantBookingService {
         return new ReservationSummary(
                 reservation.id(),
                 reservation.serviceId(),
-                reservation.serviceName(),
-                reservation.addOns(),
+                service.name(),
                 blankFallback(reservation.customerName(), "未填姓名"),
                 reservation.startsAt(),
                 reservation.endsAt(),
-                reservation.totalDurationMinutes(),
-                reservation.totalPriceAmount(),
                 reservation.status(),
                 reservation.createdAt());
     }

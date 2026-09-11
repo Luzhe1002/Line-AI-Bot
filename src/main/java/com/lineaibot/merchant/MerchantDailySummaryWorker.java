@@ -103,7 +103,7 @@ public class MerchantDailySummaryWorker {
                 .append("　")
                 .append(item.customerName())
                 .append("｜")
-                .append(selectionLabel(item)));
+                .append(item.serviceName()));
         if (reservations.size() > 10) {
             text.append("\n其餘請開啟預約月曆查看。");
         }
@@ -151,16 +151,5 @@ public class MerchantDailySummaryWorker {
                         + candidate.staff().id()
                         + ":"
                         + localDate);
-    }
-
-    private String selectionLabel(MerchantDtos.ReservationSummary reservation) {
-        if (reservation.addOns().isEmpty()) {
-            return reservation.serviceName();
-        }
-        return reservation.serviceName()
-                + "＋"
-                + reservation.addOns().stream()
-                        .map(com.lineaibot.booking.BookingDtos.ReservationAddOnRead::name)
-                        .collect(java.util.stream.Collectors.joining("＋"));
     }
 }

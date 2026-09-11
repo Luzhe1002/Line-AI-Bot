@@ -3,7 +3,6 @@ package com.lineaibot.booking;
 import com.lineaibot.booking.BookingDtos.AvailabilitySlot;
 import com.lineaibot.booking.BookingDtos.ReservationCreate;
 import com.lineaibot.booking.BookingDtos.ReservationRead;
-import com.lineaibot.booking.BookingDtos.ReservationAddOnRead;
 import com.lineaibot.shared.ApiException;
 import com.lineaibot.tenant.TenantRepository.TenantRow;
 import java.time.Instant;
@@ -14,10 +13,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.LinkedHashSet;
-import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
@@ -26,14 +21,6 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 public class BookingManager {
-
-    public record BookingQuote(
-            List<String> addOnIds, int durationMinutes, int totalPriceAmount) {}
-
-    private record Selection(
-            BookingRepository.ServiceRow service,
-            List<BookingRepository.AddOnRow> addOns,
-            BookingQuote quote) {}
 
     private final BookingRepository repository;
     private final ReservationWriter writer;
@@ -53,30 +40,13 @@ public class BookingManager {
 
     public List<AvailabilitySlot> listAvailableSlots(
             TenantRow tenant, String serviceId, LocalDate localDate) {
-        return listAvailableSlots(tenant, serviceId, List.of(), localDate, Instant.now());
-    }
-
-    public List<AvailabilitySlot> listAvailableSlots(
-            TenantRow tenant,
-            String serviceId,
-            List<String> addOnIds,
-            LocalDate localDate) {
-        return listAvailableSlots(tenant, serviceId, addOnIds, localDate, Instant.now());
+        return listAvailableSlots(tenant, serviceId, localDate, Instant.now());
     }
 
     public List<AvailabilitySlot> listAvailableSlots(
             TenantRow tenant, String serviceId, LocalDate localDate, Instant now) {
-        return listAvailableSlots(tenant, serviceId, List.of(), localDate, now);
-    }
-
-    public List<AvailabilitySlot> listAvailableSlots(
-            TenantRow tenant,
-            String serviceId,
-            List<String> addOnIds,
-            LocalDate localDate,
-            Instant now) {
-        Selection selection = resolveSelection(tenant.id(), serviceId, addOnIds);
-        if (!selection.service().active()) {
+        var bookingService = requireService(tenant.id(), serviceId);
+        if (!bookingService.active()) {
             return List.of();
         }
         int weekday = localDate.getDayOfWeek().getValue() - 1;
@@ -93,19 +63,10 @@ public class BookingManager {
 
         List<AvailabilitySlot> result = new ArrayList<>();
         ZonedDateTime cursor = localOpen;
-        while (!cursor.plusMinutes(selection.quote().durationMinutes()).isAfter(localClose)) {
+        while (!cursor.plusMinutes(tenant.slotMinutes()).isAfter(localClose)) {
             Instant startsAt = cursor.toInstant();
-            Instant endsAt = cursor.plusMinutes(selection.quote().durationMinutes()).toInstant();
-            boolean allSlotsAvailable = true;
-            for (int offset = 0;
-                    offset < selection.quote().durationMinutes();
-                    offset += tenant.slotMinutes()) {
-                if (reserved.contains(cursor.plusMinutes(offset).toInstant())) {
-                    allSlotsAvailable = false;
-                    break;
-                }
-            }
-            if (startsAt.isAfter(now) && allSlotsAvailable) {
+            Instant endsAt = cursor.plusMinutes(tenant.slotMinutes()).toInstant();
+            if (startsAt.isAfter(now) && !reserved.contains(startsAt)) {
                 result.add(new AvailabilitySlot(startsAt, endsAt));
             }
             cursor = cursor.plusMinutes(tenant.slotMinutes());
@@ -134,7 +95,6 @@ public class BookingManager {
         return createReservation(
                 tenant,
                 request.serviceId(),
-                request.addOnIds(),
                 request.lineUserId(),
                 request.startsAt().toInstant(),
                 request.customerName(),
@@ -144,7 +104,6 @@ public class BookingManager {
     public ReservationRead createReservation(
             TenantRow tenant,
             String serviceId,
-            List<String> addOnIds,
             String lineUserId,
             Instant startsAt,
             String customerName,
@@ -153,36 +112,24 @@ public class BookingManager {
         if (existing.isPresent()) {
             return existing.get();
         }
-        Selection selection = resolveSelection(tenant.id(), serviceId, addOnIds);
-        if (!selection.service().active()) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "Booking service is inactive");
-        }
-        validateSlot(tenant, startsAt, selection.quote().durationMinutes());
+        requireActiveService(tenant.id(), serviceId);
+        validateSlot(tenant, startsAt);
 
         Instant now = Instant.now();
-        List<ReservationAddOnRead> reservationAddOns = selection.addOns().stream()
-                .map(addOn -> new ReservationAddOnRead(
-                        addOn.id(), addOn.name(), addOn.durationMinutes(), addOn.priceAmount()))
-                .toList();
         ReservationRead reservation = new ReservationRead(
                 UUID.randomUUID().toString(),
                 tenant.id(),
                 serviceId,
-                selection.service().name(),
-                reservationAddOns,
                 lineUserId,
                 customerName,
                 startsAt,
-                startsAt.plus(selection.quote().durationMinutes(), ChronoUnit.MINUTES),
-                selection.quote().durationMinutes(),
-                selection.quote().totalPriceAmount(),
+                startsAt.plus(tenant.slotMinutes(), ChronoUnit.MINUTES),
                 "CONFIRMED",
                 idempotencyKey,
                 now,
                 null);
         try {
-            writer.insert(reservation, tenant.slotMinutes(), "CUSTOMER", lineUserId);
+            writer.insert(reservation, "CUSTOMER", lineUserId);
             return reservation;
         } catch (DataIntegrityViolationException exception) {
             return repository.findByIdempotency(tenant.id(), idempotencyKey)
@@ -244,14 +191,10 @@ public class BookingManager {
                 reservation.id(),
                 reservation.tenantId(),
                 reservation.serviceId(),
-                reservation.serviceName(),
-                reservation.addOns(),
                 reservation.lineUserId(),
                 reservation.customerName(),
                 reservation.startsAt(),
                 reservation.endsAt(),
-                reservation.totalDurationMinutes(),
-                reservation.totalPriceAmount(),
                 "CANCELLED",
                 reservation.idempotencyKey(),
                 reservation.createdAt(),
@@ -340,19 +283,10 @@ public class BookingManager {
     }
 
     private void validateSlot(TenantRow tenant, Instant startsAt) {
-        validateSlot(tenant, startsAt, tenant.slotMinutes());
-    }
-
-    private void validateSlot(TenantRow tenant, Instant startsAt, int durationMinutes) {
-        validateSlotAlignment(tenant, startsAt, durationMinutes);
+        validateSlotAlignment(tenant, startsAt);
     }
 
     private void validateSlotAlignment(TenantRow tenant, Instant startsAt) {
-        validateSlotAlignment(tenant, startsAt, tenant.slotMinutes());
-    }
-
-    private void validateSlotAlignment(
-            TenantRow tenant, Instant startsAt, int durationMinutes) {
         Instant now = Instant.now();
         if (!startsAt.isAfter(now)) {
             throw new ApiException(
@@ -369,7 +303,7 @@ public class BookingManager {
                 localStart.toLocalDate().atTime(hours.openTime()).atZone(zone);
         ZonedDateTime dayClose =
                 localStart.toLocalDate().atTime(hours.closeTime()).atZone(zone);
-        ZonedDateTime localEnd = localStart.plusMinutes(durationMinutes);
+        ZonedDateTime localEnd = localStart.plusMinutes(tenant.slotMinutes());
         if (localStart.isBefore(dayOpen) || localEnd.isAfter(dayClose)) {
             throw new ApiException(
                     HttpStatus.UNPROCESSABLE_ENTITY,
@@ -381,55 +315,5 @@ public class BookingManager {
                     HttpStatus.UNPROCESSABLE_ENTITY,
                     "The selected time is not aligned to a bookable slot");
         }
-    }
-
-    public BookingQuote quote(String tenantId, String serviceId, List<String> addOnIds) {
-        return resolveSelection(tenantId, serviceId, addOnIds).quote();
-    }
-
-    private Selection resolveSelection(
-            String tenantId, String serviceId, List<String> requestedAddOnIds) {
-        BookingRepository.ServiceRow service = requireService(tenantId, serviceId);
-        List<String> addOnIds = requestedAddOnIds == null
-                ? List.of()
-                : new LinkedHashSet<>(requestedAddOnIds).stream().toList();
-        if (addOnIds.size() > 20 || addOnIds.stream().anyMatch(id -> id == null || id.isBlank())) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY, "Booking add-on selection is invalid");
-        }
-        Map<String, BookingRepository.AddOnRow> allowed = service.addOns().stream()
-                .collect(Collectors.toMap(
-                        BookingRepository.AddOnRow::id, Function.identity()));
-        List<BookingRepository.AddOnRow> selected = new ArrayList<>();
-        for (String addOnId : addOnIds) {
-            BookingRepository.AddOnRow addOn = allowed.get(addOnId);
-            if (addOn == null || !addOn.active()) {
-                throw new ApiException(
-                        HttpStatus.UNPROCESSABLE_ENTITY,
-                        "Booking add-on is unavailable for the selected service");
-            }
-            selected.add(addOn);
-        }
-        int durationMinutes = service.durationMinutes();
-        int totalPriceAmount = service.priceAmount();
-        try {
-            for (BookingRepository.AddOnRow addOn : selected) {
-                durationMinutes = Math.addExact(durationMinutes, addOn.durationMinutes());
-                totalPriceAmount = Math.addExact(totalPriceAmount, addOn.priceAmount());
-            }
-        } catch (ArithmeticException exception) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "The selected service total is too large");
-        }
-        if (durationMinutes <= 0 || durationMinutes > 1440) {
-            throw new ApiException(
-                    HttpStatus.UNPROCESSABLE_ENTITY,
-                    "The selected service duration must be between 1 and 1440 minutes");
-        }
-        return new Selection(
-                service,
-                selected,
-                new BookingQuote(addOnIds, durationMinutes, totalPriceAmount));
     }
 }

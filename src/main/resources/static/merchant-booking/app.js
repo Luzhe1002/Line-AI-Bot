@@ -90,20 +90,6 @@
     }).format(new Date(value));
   }
 
-  function selectionLabel(item) {
-    const addOns = item.add_ons || [];
-    return [item.service_name, ...addOns.map((addOn) => addOn.name)].join("＋");
-  }
-
-  function bookingDetails(item) {
-    const price = new Intl.NumberFormat("zh-TW", {
-      style: "currency",
-      currency: "TWD",
-      maximumFractionDigits: 0,
-    }).format(item.total_price_amount || 0);
-    return `${selectionLabel(item)} · ${item.total_duration_minutes} 分鐘 · ${price}`;
-  }
-
   function escapeHtml(value = "") {
     return String(value).replace(/[&<>"']/g, (char) => ({
       "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;",
@@ -162,7 +148,7 @@
             <div>
               <span class="booking-time">${escapeHtml(localDateTime(item.starts_at))}</span>
               <h3>${escapeHtml(item.customer_name)}</h3>
-              <p class="booking-meta">${escapeHtml(bookingDetails(item))}<br>${escapeHtml(item.id.slice(0, 8).toUpperCase())}</p>
+              <p class="booking-meta">${escapeHtml(item.service_name)} · ${escapeHtml(item.id.slice(0, 8).toUpperCase())}</p>
             </div>
             <span class="status ${item.status === "CANCELLED" ? "cancelled" : ""}">${item.status === "CONFIRMED" ? "已確認" : "已取消"}</span>
           </div>

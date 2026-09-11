@@ -1,7 +1,6 @@
 package com.lineaibot.booking;
 
 import com.lineaibot.booking.BookingDtos.ReservationRead;
-import com.lineaibot.booking.BookingDtos.ReservationAddOnRead;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.time.Instant;
@@ -17,23 +16,7 @@ import org.springframework.stereotype.Repository;
 public class BookingRepository {
 
     public record ServiceRow(
-            String id,
-            String tenantId,
-            String name,
-            String description,
-            int durationMinutes,
-            int priceAmount,
-            boolean active,
-            List<AddOnRow> addOns) {}
-
-    public record AddOnRow(
-            String id,
-            String tenantId,
-            String name,
-            String description,
-            int durationMinutes,
-            int priceAmount,
-            boolean active) {}
+            String id, String tenantId, String name, String description, boolean active) {}
 
     public record BusinessHourRow(
             int weekday, LocalTime openTime, LocalTime closeTime, boolean active) {}
@@ -42,12 +25,9 @@ public class BookingRepository {
             String id,
             String serviceId,
             String serviceName,
-            List<ReservationAddOnRead> addOns,
             String customerName,
             Instant startsAt,
             Instant endsAt,
-            int totalDurationMinutes,
-            int totalPriceAmount,
             String status,
             Instant createdAt) {}
 
@@ -70,32 +50,36 @@ public class BookingRepository {
 
     public Optional<ServiceRow> findService(String tenantId, String serviceId) {
         return jdbc.sql("""
-                        select id, tenant_id, name, description, duration_minutes,
-                               price_amount, active
+                        select id, tenant_id, name, description, active
                         from booking_services
                         where id = :serviceId and tenant_id = :tenantId
                         """)
                 .param("serviceId", serviceId)
                 .param("tenantId", tenantId)
-                .query((rs, rowNum) -> mapService(rs))
-                .optional()
-                .map(this::withActiveAddOns);
+                .query((rs, rowNum) -> new ServiceRow(
+                        rs.getString("id"),
+                        rs.getString("tenant_id"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getBoolean("active")))
+                .optional();
     }
 
     public List<ServiceRow> findActiveServices(String tenantId) {
         return jdbc.sql("""
-                        select id, tenant_id, name, description, duration_minutes,
-                               price_amount, active
+                        select id, tenant_id, name, description, active
                         from booking_services
                         where tenant_id = :tenantId and active = true
                         order by created_at
                         """)
                 .param("tenantId", tenantId)
-                .query((rs, rowNum) -> mapService(rs))
-                .list()
-                .stream()
-                .map(this::withActiveAddOns)
-                .toList();
+                .query((rs, rowNum) -> new ServiceRow(
+                        rs.getString("id"),
+                        rs.getString("tenant_id"),
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        rs.getBoolean("active")))
+                .list();
     }
 
     public Optional<BusinessHourRow> findActiveBusinessHour(String tenantId, int weekday) {
@@ -132,11 +116,12 @@ public class BookingRepository {
     public List<AdminReservationRow> findBetween(
             String tenantId, Instant windowStart, Instant windowEnd) {
         return jdbc.sql("""
-                        select r.id, r.service_id, r.service_name,
+                        select r.id, r.service_id, s.name as service_name,
                                r.customer_name, r.starts_at, r.ends_at,
-                               r.total_duration_minutes, r.total_price_amount,
                                r.status, r.created_at
                         from reservations r
+                        join booking_services s
+                          on s.id = r.service_id and s.tenant_id = r.tenant_id
                         where r.tenant_id = :tenantId
                           and r.starts_at >= :windowStart
                           and r.starts_at < :windowEnd
@@ -149,29 +134,12 @@ public class BookingRepository {
                         rs.getString("id"),
                         rs.getString("service_id"),
                         rs.getString("service_name"),
-                        List.of(),
                         rs.getString("customer_name"),
                         rs.getObject("starts_at", OffsetDateTime.class).toInstant(),
                         rs.getObject("ends_at", OffsetDateTime.class).toInstant(),
-                        rs.getInt("total_duration_minutes"),
-                        rs.getInt("total_price_amount"),
                         rs.getString("status"),
                         rs.getObject("created_at", OffsetDateTime.class).toInstant()))
-                .list()
-                .stream()
-                .map(row -> new AdminReservationRow(
-                        row.id(),
-                        row.serviceId(),
-                        row.serviceName(),
-                        findReservationAddOns(tenantId, row.id()),
-                        row.customerName(),
-                        row.startsAt(),
-                        row.endsAt(),
-                        row.totalDurationMinutes(),
-                        row.totalPriceAmount(),
-                        row.status(),
-                        row.createdAt()))
-                .toList();
+                .list();
     }
 
     public Optional<ReservationRead> findByIdempotency(
@@ -183,8 +151,7 @@ public class BookingRepository {
                 .param("tenantId", tenantId)
                 .param("idempotencyKey", idempotencyKey)
                 .query(this::mapReservation)
-                .optional()
-                .map(this::withReservationAddOns);
+                .optional();
     }
 
     public Optional<ReservationRead> findById(
@@ -205,7 +172,7 @@ public class BookingRepository {
         if (lineUserId != null) {
             statement = statement.param("lineUserId", lineUserId);
         }
-        return statement.query(this::mapReservation).optional().map(this::withReservationAddOns);
+        return statement.query(this::mapReservation).optional();
     }
 
     public List<ReservationRead> findAll(String tenantId) {
@@ -215,10 +182,7 @@ public class BookingRepository {
                         """)
                 .param("tenantId", tenantId)
                 .query(this::mapReservation)
-                .list()
-                .stream()
-                .map(this::withReservationAddOns)
-                .toList();
+                .list();
     }
 
     public List<ReservationRead> findUpcomingForUser(
@@ -237,24 +201,17 @@ public class BookingRepository {
                 .param("now", utc(now))
                 .param("limit", limit)
                 .query(this::mapReservation)
-                .list()
-                .stream()
-                .map(this::withReservationAddOns)
-                .toList();
+                .list();
     }
 
     public void insert(ReservationRead reservation) {
         jdbc.sql("""
                         insert into reservations (
-                            id, tenant_id, service_id, service_name,
-                            total_duration_minutes, total_price_amount,
-                            line_user_id, customer_name,
+                            id, tenant_id, service_id, line_user_id, customer_name,
                             starts_at, ends_at, active_slot_key, status,
                             idempotency_key, created_at, cancelled_at
                         ) values (
-                            :id, :tenantId, :serviceId, :serviceName,
-                            :totalDurationMinutes, :totalPriceAmount,
-                            :lineUserId, :customerName,
+                            :id, :tenantId, :serviceId, :lineUserId, :customerName,
                             :startsAt, :endsAt, :startsAt, :status,
                             :idempotencyKey, :createdAt, null
                         )
@@ -262,9 +219,6 @@ public class BookingRepository {
                 .param("id", reservation.id())
                 .param("tenantId", reservation.tenantId())
                 .param("serviceId", reservation.serviceId())
-                .param("serviceName", reservation.serviceName())
-                .param("totalDurationMinutes", reservation.totalDurationMinutes())
-                .param("totalPriceAmount", reservation.totalPriceAmount())
                 .param("lineUserId", reservation.lineUserId())
                 .param("customerName", reservation.customerName())
                 .param("startsAt", utc(reservation.startsAt()))
@@ -272,31 +226,6 @@ public class BookingRepository {
                 .param("status", reservation.status())
                 .param("idempotencyKey", reservation.idempotencyKey())
                 .param("createdAt", utc(reservation.createdAt()))
-                .update();
-    }
-
-    public void insertReservationAddOn(
-            String tenantId,
-            String reservationId,
-            ReservationAddOnRead addOn,
-            Instant createdAt) {
-        jdbc.sql("""
-                        insert into reservation_add_ons (
-                            id, tenant_id, reservation_id, add_on_id, name,
-                            duration_minutes, price_amount, created_at
-                        ) values (
-                            :id, :tenantId, :reservationId, :addOnId, :name,
-                            :durationMinutes, :priceAmount, :createdAt
-                        )
-                        """)
-                .param("id", java.util.UUID.randomUUID().toString())
-                .param("tenantId", tenantId)
-                .param("reservationId", reservationId)
-                .param("addOnId", addOn.id())
-                .param("name", addOn.name())
-                .param("durationMinutes", addOn.durationMinutes())
-                .param("priceAmount", addOn.priceAmount())
-                .param("createdAt", utc(createdAt))
                 .update();
     }
 
@@ -429,101 +358,14 @@ public class BookingRepository {
                 rs.getString("id"),
                 rs.getString("tenant_id"),
                 rs.getString("service_id"),
-                rs.getString("service_name"),
-                List.of(),
                 rs.getString("line_user_id"),
                 rs.getString("customer_name"),
                 rs.getObject("starts_at", OffsetDateTime.class).toInstant(),
                 rs.getObject("ends_at", OffsetDateTime.class).toInstant(),
-                rs.getInt("total_duration_minutes"),
-                rs.getInt("total_price_amount"),
                 rs.getString("status"),
                 rs.getString("idempotency_key"),
                 rs.getObject("created_at", OffsetDateTime.class).toInstant(),
                 cancelled == null ? null : cancelled.toInstant());
-    }
-
-    private ServiceRow mapService(ResultSet rs) throws SQLException {
-        return new ServiceRow(
-                rs.getString("id"),
-                rs.getString("tenant_id"),
-                rs.getString("name"),
-                rs.getString("description"),
-                rs.getInt("duration_minutes"),
-                rs.getInt("price_amount"),
-                rs.getBoolean("active"),
-                List.of());
-    }
-
-    private ServiceRow withActiveAddOns(ServiceRow service) {
-        List<AddOnRow> addOns = jdbc.sql("""
-                        select a.id, a.tenant_id, a.name, a.description,
-                               a.duration_minutes, a.price_amount, a.active
-                        from booking_service_add_ons sa
-                        join booking_add_ons a
-                          on a.id = sa.add_on_id and a.tenant_id = sa.tenant_id
-                        where sa.tenant_id = :tenantId
-                          and sa.service_id = :serviceId
-                          and a.active = true
-                        order by a.created_at
-                        """)
-                .param("tenantId", service.tenantId())
-                .param("serviceId", service.id())
-                .query((rs, rowNum) -> new AddOnRow(
-                        rs.getString("id"),
-                        rs.getString("tenant_id"),
-                        rs.getString("name"),
-                        rs.getString("description"),
-                        rs.getInt("duration_minutes"),
-                        rs.getInt("price_amount"),
-                        rs.getBoolean("active")))
-                .list();
-        return new ServiceRow(
-                service.id(),
-                service.tenantId(),
-                service.name(),
-                service.description(),
-                service.durationMinutes(),
-                service.priceAmount(),
-                service.active(),
-                addOns);
-    }
-
-    private ReservationRead withReservationAddOns(ReservationRead reservation) {
-        return new ReservationRead(
-                reservation.id(),
-                reservation.tenantId(),
-                reservation.serviceId(),
-                reservation.serviceName(),
-                findReservationAddOns(reservation.tenantId(), reservation.id()),
-                reservation.lineUserId(),
-                reservation.customerName(),
-                reservation.startsAt(),
-                reservation.endsAt(),
-                reservation.totalDurationMinutes(),
-                reservation.totalPriceAmount(),
-                reservation.status(),
-                reservation.idempotencyKey(),
-                reservation.createdAt(),
-                reservation.cancelledAt());
-    }
-
-    private List<ReservationAddOnRead> findReservationAddOns(
-            String tenantId, String reservationId) {
-        return jdbc.sql("""
-                        select add_on_id, name, duration_minutes, price_amount
-                        from reservation_add_ons
-                        where tenant_id = :tenantId and reservation_id = :reservationId
-                        order by created_at
-                        """)
-                .param("tenantId", tenantId)
-                .param("reservationId", reservationId)
-                .query((rs, rowNum) -> new ReservationAddOnRead(
-                        rs.getString("add_on_id"),
-                        rs.getString("name"),
-                        rs.getInt("duration_minutes"),
-                        rs.getInt("price_amount")))
-                .list();
     }
 
     private BookingBlockRow mapBlock(ResultSet rs, int rowNum) throws SQLException {

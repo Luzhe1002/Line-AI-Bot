@@ -364,91 +364,6 @@ function renderSettings() {
   $("#line-status").textContent = configured
     ? (enabled ? "Webhook 已建立，可接收與回覆顧客訊息。" : "憑證已保存，但目前不會回覆訊息。")
     : "完成左側憑證設定後，再把 Webhook URL 貼到 LINE Developers Console。";
-  renderBookingSettings();
-}
-
-function formatMoney(amount) {
-  return new Intl.NumberFormat("zh-TW", {
-    style: "currency",
-    currency: "TWD",
-    maximumFractionDigits: 0,
-  }).format(amount || 0);
-}
-
-function addOnOptions(selectedIds = [], includeInactive = false) {
-  const selected = new Set(selectedIds);
-  const addOns = (state.overview.booking_add_ons || [])
-    .filter((item) => includeInactive || item.active);
-  if (!addOns.length) {
-    return '<p class="muted">尚無加購項目。請先在左側新增加購。</p>';
-  }
-  return addOns.map((item) => `
-    <label class="option-check">
-      <input type="checkbox" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? "checked" : ""}>
-      <span>${escapeHtml(item.name)}${item.active ? "" : "（已停用）"} · +${item.duration_minutes} 分鐘 · +${escapeHtml(formatMoney(item.price_amount))}</span>
-    </label>`).join("");
-}
-
-function renderBookingSettings() {
-  const services = state.overview.booking_services || [];
-  const addOns = state.overview.booking_add_ons || [];
-  const slotMinutes = state.tenant.slot_minutes;
-  const serviceForm = $("#booking-service-form");
-  const addOnForm = $("#add-on-form");
-  [serviceForm.elements.duration_minutes, addOnForm.elements.duration_minutes]
-    .forEach((input) => { input.step = String(slotMinutes); });
-  serviceForm.elements.duration_minutes.min = String(slotMinutes);
-  if (!serviceForm.elements.duration_minutes.value) {
-    serviceForm.elements.duration_minutes.value = String(slotMinutes);
-  }
-  if (!addOnForm.elements.duration_minutes.value) {
-    addOnForm.elements.duration_minutes.value = String(slotMinutes);
-  }
-  $("#service-add-on-options").innerHTML = addOnOptions();
-
-  $("#booking-service-list").innerHTML = services.length
-    ? services.map((service) => {
-      const selectedIds = (service.add_ons || []).map((item) => item.id);
-      return `
-        <details class="catalog-item ${service.active ? "" : "inactive"}" data-service-id="${escapeHtml(service.id)}">
-          <summary>
-            <span class="catalog-title"><strong>${escapeHtml(service.name)}</strong><small class="catalog-meta">${service.duration_minutes} 分鐘 · ${escapeHtml(formatMoney(service.price_amount))} · ${(service.add_ons || []).length} 個加購</small></span>
-            <span class="catalog-status">${service.active ? "開放預約" : "已停用"}</span>
-          </summary>
-          <div class="catalog-edit">
-            <label>服務名稱<input name="name" maxlength="160" required value="${escapeHtml(service.name)}"></label>
-            <label>說明<textarea name="description" maxlength="2000" rows="3">${escapeHtml(service.description || "")}</textarea></label>
-            <div class="two-col">
-              <label>基本時間（分鐘）<input name="duration_minutes" type="number" min="${slotMinutes}" max="1440" step="${slotMinutes}" required value="${service.duration_minutes}"></label>
-              <label>基本價格（NT$）<input name="price_amount" type="number" min="0" required value="${service.price_amount}"></label>
-            </div>
-            <fieldset class="option-fieldset"><legend>可提供的加購</legend><div class="option-checks" data-service-add-ons>${addOnOptions(selectedIds, true)}</div></fieldset>
-            <label class="switch-row"><input name="active" type="checkbox" ${service.active ? "checked" : ""}><span>開放顧客預約</span></label>
-            <button class="primary compact" data-save-service type="button">儲存主服務</button>
-          </div>
-        </details>`;
-    }).join("")
-    : '<div class="catalog-empty">尚無主服務。建立後顧客即可在預約頁選擇。</div>';
-
-  $("#booking-add-on-list").innerHTML = addOns.length
-    ? addOns.map((addOn) => `
-      <details class="catalog-item ${addOn.active ? "" : "inactive"}" data-add-on-id="${escapeHtml(addOn.id)}">
-        <summary>
-          <span class="catalog-title"><strong>${escapeHtml(addOn.name)}</strong><small class="catalog-meta">+${addOn.duration_minutes} 分鐘 · +${escapeHtml(formatMoney(addOn.price_amount))}</small></span>
-          <span class="catalog-status">${addOn.active ? "可使用" : "已停用"}</span>
-        </summary>
-        <div class="catalog-edit">
-          <label>加購名稱<input name="name" maxlength="160" required value="${escapeHtml(addOn.name)}"></label>
-          <label>說明<textarea name="description" maxlength="2000" rows="3">${escapeHtml(addOn.description || "")}</textarea></label>
-          <div class="two-col">
-            <label>增加時間（分鐘）<input name="duration_minutes" type="number" min="0" max="1440" step="${slotMinutes}" required value="${addOn.duration_minutes}"></label>
-            <label>增加費用（NT$）<input name="price_amount" type="number" min="0" required value="${addOn.price_amount}"></label>
-          </div>
-          <label class="switch-row"><input name="active" type="checkbox" ${addOn.active ? "checked" : ""}><span>允許顧客加購</span></label>
-          <button class="primary compact" data-save-add-on type="button">儲存加購</button>
-        </div>
-      </details>`).join("")
-    : '<div class="catalog-empty">尚無加購項目。可先建立「護髮」等選項，再加入主服務。</div>';
 }
 
 async function loadStaff() {
@@ -523,7 +438,7 @@ function switchView(name) {
     knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。", "編輯、索引與發布都集中在同一個工作區。"],
     tester: ["ANSWER LAB", "每次發布前，都先問一次。", "用顧客的角度確認回答內容、信心與引用來源。"],
     staff: ["MERCHANT STAFF", "把日常預約管理留在 LINE。", "設定角色、通知與每位人員會看到的中文管理入口。"],
-    settings: ["MERCHANT SETTINGS", "把預約服務與 LINE 設定好。", "管理主服務、加購、時間、價格與官方帳號連線。"],
+    settings: ["CHANNEL SETUP", "把 LINE 接到商家的服務流程。", "依序完成憑證、Webhook 與啟用狀態檢查。"],
   };
   $("#page-eyebrow").textContent = titles[name][0];
   $("#page-title").textContent = titles[name][1];
@@ -886,118 +801,6 @@ $("#line-form").addEventListener("submit", async (event) => {
     toast(error.message, true);
   } finally {
     setSubmitting(form, false, "儲存中…");
-  }
-});
-
-$("#add-on-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const data = formData(form);
-  setSubmitting(form, true, "新增中…");
-  try {
-    await api("/booking-add-ons", {
-      method: "POST",
-      body: JSON.stringify({
-        name: data.name.trim(),
-        description: data.description.trim() || null,
-        duration_minutes: Number(data.duration_minutes),
-        price_amount: Number(data.price_amount),
-      }),
-    });
-    form.reset();
-    await refreshOverview();
-    toast("加購項目已新增");
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    setSubmitting(form, false, "新增中…");
-  }
-});
-
-$("#booking-service-form").addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const form = event.currentTarget;
-  const data = formData(form);
-  const addOnIds = $$("#service-add-on-options input:checked").map((input) => input.value);
-  setSubmitting(form, true, "新增中…");
-  try {
-    await api("/booking-services", {
-      method: "POST",
-      body: JSON.stringify({
-        name: data.name.trim(),
-        description: data.description.trim() || null,
-        duration_minutes: Number(data.duration_minutes),
-        price_amount: Number(data.price_amount),
-        add_on_ids: addOnIds,
-      }),
-    });
-    form.reset();
-    await refreshOverview();
-    toast("主服務已新增");
-  } catch (error) {
-    toast(error.message, true);
-  } finally {
-    setSubmitting(form, false, "新增中…");
-  }
-});
-
-$("#booking-service-list").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-save-service]");
-  if (!button) return;
-  const item = button.closest("[data-service-id]");
-  const editor = button.closest(".catalog-edit");
-  const invalid = [...editor.querySelectorAll("input, textarea")]
-    .find((input) => !input.checkValidity());
-  if (invalid) return invalid.reportValidity();
-  const field = (name) => editor.querySelector(`[name="${name}"]`);
-  button.disabled = true;
-  try {
-    await api(`/booking-services/${encodeURIComponent(item.dataset.serviceId)}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        name: field("name").value.trim(),
-        description: field("description").value.trim() || null,
-        duration_minutes: Number(field("duration_minutes").value),
-        price_amount: Number(field("price_amount").value),
-        active: field("active").checked,
-        add_on_ids: [...editor.querySelectorAll("[data-service-add-ons] input:checked")]
-          .map((input) => input.value),
-      }),
-    });
-    await refreshOverview();
-    toast("主服務設定已儲存");
-  } catch (error) {
-    toast(error.message, true);
-    button.disabled = false;
-  }
-});
-
-$("#booking-add-on-list").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-save-add-on]");
-  if (!button) return;
-  const item = button.closest("[data-add-on-id]");
-  const editor = button.closest(".catalog-edit");
-  const invalid = [...editor.querySelectorAll("input, textarea")]
-    .find((input) => !input.checkValidity());
-  if (invalid) return invalid.reportValidity();
-  const field = (name) => editor.querySelector(`[name="${name}"]`);
-  button.disabled = true;
-  try {
-    await api(`/booking-add-ons/${encodeURIComponent(item.dataset.addOnId)}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        name: field("name").value.trim(),
-        description: field("description").value.trim() || null,
-        duration_minutes: Number(field("duration_minutes").value),
-        price_amount: Number(field("price_amount").value),
-        active: field("active").checked,
-      }),
-    });
-    await refreshOverview();
-    toast("加購設定已儲存");
-  } catch (error) {
-    toast(error.message, true);
-    button.disabled = false;
   }
 });
 

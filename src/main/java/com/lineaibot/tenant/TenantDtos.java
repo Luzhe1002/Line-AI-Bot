@@ -7,7 +7,6 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.time.LocalTime;
-import java.util.List;
 
 public final class TenantDtos {
 
@@ -64,48 +63,12 @@ public final class TenantDtos {
 
     public record BookingServiceCreate(
             @NotBlank @Size(max = 160) String name,
-            @Size(max = 2000) String description,
-            @Min(1) @Max(1440) Integer durationMinutes,
-            @Min(0) Integer priceAmount,
-            List<String> addOnIds) {}
-
-    public record BookingServiceUpdate(
-            @NotBlank @Size(max = 160) String name,
-            @Size(max = 2000) String description,
-            @Min(1) @Max(1440) int durationMinutes,
-            @Min(0) int priceAmount,
-            boolean active,
-            List<String> addOnIds) {}
-
-    public record BookingAddOnCreate(
-            @NotBlank @Size(max = 160) String name,
-            @Size(max = 2000) String description,
-            @Min(0) @Max(1440) int durationMinutes,
-            @Min(0) int priceAmount) {}
-
-    public record BookingAddOnUpdate(
-            @NotBlank @Size(max = 160) String name,
-            @Size(max = 2000) String description,
-            @Min(0) @Max(1440) int durationMinutes,
-            @Min(0) int priceAmount,
-            boolean active) {}
-
-    public record BookingAddOnRead(
-            String id,
-            String tenantId,
-            String name,
-            String description,
-            int durationMinutes,
-            int priceAmount,
-            boolean active) {}
+            @Size(max = 2000) String description) {}
 
     public record BookingServiceRead(
             String id,
             String tenantId,
             String name,
             String description,
-            int durationMinutes,
-            int priceAmount,
-            boolean active,
-            List<BookingAddOnRead> addOns) {}
+            boolean active) {}
 }
