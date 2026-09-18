@@ -61,6 +61,12 @@ public class LocalAiProvider implements AiProvider {
             List<GroundingContext> contexts,
             String tenantName,
             String safetyIdentifier) {
+        return generateAnswer(question, contexts, tenantName, safetyIdentifier, true);
+    }
+
+    @Override
+    public GeneratedText generateAnswer(String question, List<GroundingContext> contexts,
+            String tenantName, String safetyIdentifier, boolean bookingEnabled) {
         if (contexts.isEmpty()) {
             throw new IllegalArgumentException(
                     "Cannot generate a grounded answer without context");
@@ -71,7 +77,7 @@ public class LocalAiProvider implements AiProvider {
         for (GroundingContext context : contexts) {
             for (String candidate : SENTENCE_BOUNDARY.split(context.content())) {
                 String sentence = candidate.strip();
-                if (sentence.isEmpty()) {
+                if (sentence.isEmpty() || (!bookingEnabled && sentence.matches("(?is).*(預約|訂位|預訂|booking|book online).*"))) {
                     continue;
                 }
                 Set<String> sentenceFeatures = answerFeatures(sentence);
@@ -87,6 +93,9 @@ public class LocalAiProvider implements AiProvider {
                     bestSentence = sentence;
                 }
             }
+        }
+        if (bestSentence.isBlank() && !bookingEnabled) {
+            return new GeneratedText("目前資料無法確認，請聯絡店家或轉接人工客服。", name(), generationModel(), null);
         }
         if (bestSentence.isBlank()) {
             bestSentence = contexts.getFirst().content().strip();

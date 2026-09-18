@@ -52,7 +52,31 @@ public class MerchantRichMenuService {
     }
 
     public void scheduleTenant(String tenantId) {
+        repository.requestCustomerSync(tenantId);
         repository.requestTenantSync(tenantId, Instant.now());
+    }
+
+    public void syncCustomerMenus() {
+        for (var job : repository.readyCustomerMenus(Instant.now())) {
+            if (!repository.claimCustomerMenu(job, Instant.now())) continue;
+            boolean success = false;
+            String role = "CUSTOMER_SUPPORT";
+            try {
+                var tenant = tenants.findById(job.tenantId()).filter(TenantRepository.TenantRow::active).orElseThrow();
+                var channel = tenants.findLineChannel(job.tenantId()).filter(TenantRepository.LineChannelRow::enabled).orElseThrow();
+                role = tenant.bookingEnabled() ? "CUSTOMER_BOOKING" : "CUSTOMER_SUPPORT";
+                String token = crypto.decryptSecret(properties.getEncryptionKey(), channel.channelAccessTokenEncrypted());
+                lineClient.setDefaultRichMenu(token, ensureRichMenu(tenant.id(), role, token));
+                success = true;
+            } catch (Exception exception) {
+                if (exception instanceof RestClientResponseException response && response.getStatusCode().value() == 404) {
+                    repository.resetRichMenu(job.tenantId(), role, "LINE rich menu was not found", Instant.now());
+                }
+                log.warn("Customer menu synchronization deferred tenantId={} errorType={}", job.tenantId(), exception.getClass().getSimpleName());
+            } finally {
+                repository.finishCustomerMenu(job, success, Instant.now());
+            }
+        }
     }
 
     public void recoverStaleJobs(Instant staleBefore, Instant now) {
@@ -87,6 +111,7 @@ public class MerchantRichMenuService {
                     properties.getEncryptionKey() + ":merchant-staff-line-encryption",
                     job.lineUserIdEncrypted());
 
+            if (!tenant.bookingEnabled()) role += "_SUPPORT";
             if (job.desiredLinked()) {
                 String richMenuId = ensureRichMenu(
                         job.tenantId(), role, accessToken);
@@ -133,7 +158,7 @@ public class MerchantRichMenuService {
         }
     }
 
-    private String ensureRichMenu(
+    String ensureRichMenu(
             String tenantId, String role, String accessToken) {
         var existing = repository.findRichMenu(tenantId, role).orElse(null);
         if (existing != null
@@ -157,7 +182,25 @@ public class MerchantRichMenuService {
         return richMenuId;
     }
 
-    private Map<String, Object> definition(String name, String role) {
+    Map<String, Object> definition(String name, String role) {
+        if (role.contains("SUPPORT") || role.startsWith("CUSTOMER")) {
+            boolean customer = role.startsWith("CUSTOMER");
+            boolean booking = role.equals("CUSTOMER_BOOKING");
+            return Map.of("size", Map.of("width", MerchantRichMenuImageFactory.WIDTH,
+                            "height", MerchantRichMenuImageFactory.HEIGHT),
+                    "selected", true, "name", name, "chatBarText", customer ? "店家服務" : "店家管理",
+                    "areas", customer ? List.of(
+                            messageArea(0, 0, booking ? "立即預約" : "商品與服務", booking ? "預約" : "商品與服務介紹"),
+                            messageArea(HALF_WIDTH, 0, "營業資訊", "營業時間與店家資訊"),
+                            messageArea(0, HALF_HEIGHT, booking ? "查詢預約" : "常見問題", booking ? "查詢預約" : "常見問題"),
+                            messageArea(HALF_WIDTH, HALF_HEIGHT, "聯絡店家", "人工客服"))
+                    : List.of(
+                            postbackArea(0, 0, role.startsWith("OWNER") ? "管理後台" : "店家資訊",
+                                    role.startsWith("OWNER") ? "action=merchant_portal" : "action=merchant_info"),
+                            postbackArea(HALF_WIDTH, 0, "客服案件", "action=merchant_support"),
+                            messageArea(0, HALF_HEIGHT, "營業資訊", "營業時間與店家資訊"),
+                            messageArea(HALF_WIDTH, HALF_HEIGHT, "商品與服務", "商品與服務介紹")));
+        }
         String primaryAction = "OWNER".equals(role) ? "merchant_portal" : "merchant_menu";
         String primaryLabel = "OWNER".equals(role) ? "開啟管理後台" : "開啟預約月曆";
         return Map.of(

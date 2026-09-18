@@ -50,6 +50,10 @@ class ServiceOwnedAddOnMigrationTest {
             var flyway = Flyway.configure().dataSource(url, "sa", "").load();
             flyway.migrate();
             flyway.validate();
+            try (var rows = sql.executeQuery("select booking_enabled from tenants where id = 't'")) {
+                rows.next();
+                assertThat(rows.getBoolean(1)).isTrue();
+            }
             try (var rows = sql.executeQuery("select count(distinct add_on_id) from booking_service_add_ons")) {
                 rows.next();
                 assertThat(rows.getInt(1)).isEqualTo(2);

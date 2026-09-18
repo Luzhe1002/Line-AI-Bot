@@ -298,3 +298,47 @@ test("merchant fatal error replaces loading chrome and includes recovery guidanc
   await expect(page.locator("#error-message")).toContainText("管理連結已失效");
   await expect(page.locator("#error-message")).toContainText("請回到 LINE");
 });
+
+
+test("new store starts in support mode and reveals booking setup only when selected", async ({ page }) => {
+  await page.goto("/portal/");
+  await page.getByRole("tab", { name: "建立商家" }).click();
+  const feature = page.locator('#onboard-form input[name="booking_enabled"]');
+  await expect(feature).not.toBeChecked();
+  await expect(page.locator("#onboard-booking-options")).toBeHidden();
+  await feature.check();
+  await expect(page.locator("#onboard-booking-options")).toBeVisible();
+  await feature.uncheck();
+  await expect(page.locator("#onboard-booking-options")).toBeHidden();
+});
+
+test("merchant can switch modes while retaining existing reservation management", async ({ page }, testInfo) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/portal/#token=e2e-token");
+  await expect(page.locator("#merchant-mode")).toHaveText("客服＋預約");
+  await page.getByRole("button", { name: "商家設定", exact: true }).click();
+  const feature = page.locator('#features-form input[name="booking_enabled"]');
+  await feature.uncheck();
+  await page.getByRole("button", { name: "儲存功能設定" }).click();
+  await expect(page.locator('[data-view="services"]')).toBeHidden();
+  await page.getByRole("button", { name: "客服總覽", exact: true }).click();
+  await expect(page.locator("#merchant-mode")).toHaveText("純客服");
+  await expect(page.locator('.quick-action[data-go-view="services"]')).toBeHidden();
+  await expect(page.locator("#reservation-panel-title")).toHaveText("既有預約管理");
+  await expect(page.locator("#handoff-count")).toHaveText("2");
+  await page.getByRole("button", { name: "查看客服案件", exact: true }).click();
+  await expect(page.locator("#portal-handoffs")).toContainText("詢問營業時間");
+  await page.locator('[data-close-handoff="ticket-1"]').click();
+  await expect(page.locator("#handoff-count")).toHaveText("1");
+  await page.screenshot({ path: testInfo.outputPath("support-mode-mobile.png"), fullPage: true });
+  await page.getByRole("button", { name: "查看預約", exact: true }).click();
+  await expect(page.locator("#portal-reservations")).toContainText("王小姐");
+  await page.getByRole("button", { name: "店家人員", exact: true }).click();
+  await expect(page.locator("#manager-role-guide")).toContainText("客服案件");
+  await page.getByRole("button", { name: "商家設定", exact: true }).click();
+  await page.screenshot({ path: testInfo.outputPath("support-settings-mobile.png"), fullPage: true });
+  await feature.check();
+  await page.getByRole("button", { name: "儲存功能設定" }).click();
+  await expect(page.locator('[data-view="services"]')).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});

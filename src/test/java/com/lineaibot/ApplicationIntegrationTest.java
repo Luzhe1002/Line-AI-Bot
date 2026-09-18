@@ -81,6 +81,116 @@ class ApplicationIntegrationTest {
     }
 
     @Test
+    void newMerchantsDefaultToSupportAndCanOptIntoBooking() throws Exception {
+        JsonNode created = json(mvc.perform(post("/api/v1/tenants")
+                .header("X-Platform-Admin-Key", PLATFORM_KEY).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"一般零售店\",\"slug\":\"retail-" + UUID.randomUUID() + "\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.booking_enabled").value(false)).andReturn());
+        String id = created.path("id").asText();
+        String key = created.path("admin_api_key").asText();
+        assertThat(getJson("/api/v1/tenants/" + id + "/booking-services", key).size()).isZero();
+        mvc.perform(put("/api/v1/tenants/{id}/features", id).header("X-Tenant-Api-Key", "wrong")
+                .contentType(MediaType.APPLICATION_JSON).content("{\"booking_enabled\":true}"))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(put("/api/v1/tenants/{id}/features", id).header("X-Tenant-Api-Key", key)
+                .contentType(MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isUnprocessableEntity());
+        for (boolean enabled : new boolean[] {true, false, true}) {
+            mvc.perform(put("/api/v1/tenants/{id}/features", id).header("X-Tenant-Api-Key", key)
+                    .contentType(MediaType.APPLICATION_JSON).content("{\"booking_enabled\":" + enabled + "}"))
+                    .andExpect(status().isOk()).andExpect(jsonPath("$.booking_enabled").value(enabled));
+        }
+        assertThat(getJson("/api/v1/tenants/" + id + "/booking-services", key).size()).isEqualTo(1);
+        assertThat(jdbc.sql("select revision from customer_menu_sync where tenant_id = :id")
+                .param("id", id).query(Integer.class).single()).isEqualTo(3);
+        configureLineChannel(new Tenant(id, created.path("slug").asText(), key));
+        var menuJobs = context.getBean(com.lineaibot.merchant.MerchantRichMenuRepository.class);
+        var job = menuJobs.readyCustomerMenus(Instant.now()).stream()
+                .filter(item -> item.tenantId().equals(id)).findFirst().orElseThrow();
+        assertThat(menuJobs.claimCustomerMenu(job, Instant.now())).isTrue();
+        mvc.perform(put("/api/v1/tenants/{id}/features", id).header("X-Tenant-Api-Key", key)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"booking_enabled\":false}"))
+                .andExpect(status().isOk());
+        menuJobs.finishCustomerMenu(job, true, Instant.now());
+        assertThat(menuJobs.readyCustomerMenus(Instant.now())).anySatisfy(pending -> {
+            assertThat(pending.tenantId()).isEqualTo(id);
+            assertThat(pending.revision()).isGreaterThan(job.revision());
+        });
+    }
+
+    @Test
+    void disablingBookingBlocksOldLinksButPreservesReservationsAndPortalCancellation() throws Exception {
+        Tenant tenant = createTenant("optional-booking");
+        var staleTenant = context.getBean(com.lineaibot.tenant.TenantRepository.class).findById(tenant.id()).orElseThrow();
+        String serviceId = firstId(getJson("/api/v1/tenants/" + tenant.id() + "/booking-services", tenant.apiKey()));
+        String token = bookingAccessTokens.issue(tenant.id(), tenant.slug(), "U-existing");
+        String request = """
+                {"service_id":"%s","line_user_id":"U-existing","customer_name":"既有顧客","starts_at":"%s","idempotency_key":"mode-existing"}
+                """.formatted(serviceId, nextBusinessSlot());
+        JsonNode reservation = json(mvc.perform(post("/api/v1/tenants/{id}/reservations", tenant.id())
+                .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON).content(request))
+                .andExpect(status().isCreated()).andReturn());
+        MvcResult login = mvc.perform(post("/portal/api/session").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tenant_id\":\"" + tenant.id() + "\",\"api_key\":\"" + tenant.apiKey() + "\"}"))
+                .andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) login.getRequest().getSession(false);
+        String csrf = json(login).path("csrf_token").asText();
+        mvc.perform(put("/portal/api/features").session(session).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"booking_enabled\":false}"))
+                .andExpect(status().isForbidden());
+        mvc.perform(put("/portal/api/features").session(session).header("X-CSRF-Token", csrf)
+                .contentType(MediaType.APPLICATION_JSON).content("{\"booking_enabled\":false}"))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.booking_enabled").value(false));
+        mvc.perform(get("/portal/api/overview").session(session))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.has_reservations").value(true));
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> context.getBean(com.lineaibot.booking.BookingManager.class)
+                .createReservation(staleTenant, serviceId, java.util.List.of(), "U-stale", nextBusinessSlot().plusSeconds(3600), "test", "mode-stale-write"))
+                .isInstanceOf(com.lineaibot.shared.ApiException.class).hasMessageContaining("未開放線上預約");
+        mvc.perform(get("/booking/api/{slug}/bootstrap", tenant.slug()).header("Authorization", "Bearer " + token))
+                .andExpect(status().isConflict());
+        mvc.perform(get("/booking/api/{slug}/availability", tenant.slug()).header("Authorization", "Bearer " + token)
+                .queryParam("service_id", serviceId).queryParam("local_date", "2026-10-05"))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/booking/api/{slug}/reservations", tenant.slug()).header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON).content(request.replace("mode-existing", "mode-new-public")))
+                .andExpect(status().isConflict());
+        mvc.perform(post("/api/v1/tenants/{id}/reservations", tenant.id()).header("X-Tenant-Api-Key", tenant.apiKey())
+                .contentType(MediaType.APPLICATION_JSON).content(request.replace("mode-existing", "mode-new-api")))
+                .andExpect(status().isConflict());
+        mvc.perform(get("/portal/api/reservations").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].id").value(reservation.path("id").asText()));
+        mvc.perform(post("/portal/api/reservations/{id}/cancel", reservation.path("id").asText())
+                .session(session).header("X-CSRF-Token", csrf)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+        assertThat(jdbc.sql("select count(*) from booking_events where tenant_id = :id and event_type = 'RESERVATION_CANCELLED'")
+                .param("id", tenant.id()).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
+    void handoffCasesAreTenantScopedAndRequireCsrfToClose() throws Exception {
+        Tenant tenant = createTenant("support-cases");
+        Tenant other = createTenant("other-cases");
+        String own = lineRepository.insertHandoff(tenant.id(), "U-own", "詢問商品", Instant.now());
+        String foreign = lineRepository.insertHandoff(other.id(), "U-other", "其他店家案件", Instant.now());
+        MvcResult login = mvc.perform(post("/portal/api/session").contentType(MediaType.APPLICATION_JSON)
+                .content("{\"tenant_id\":\"" + tenant.id() + "\",\"api_key\":\"" + tenant.apiKey() + "\"}"))
+                .andExpect(status().isOk()).andReturn();
+        MockHttpSession session = (MockHttpSession) login.getRequest().getSession(false);
+        String csrf = json(login).path("csrf_token").asText();
+        mvc.perform(get("/portal/api/handoffs").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1)).andExpect(jsonPath("$[0].id").value(own));
+        mvc.perform(post("/portal/api/handoffs/{id}/close", own).session(session))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/portal/api/handoffs/{id}/close", foreign).session(session).header("X-CSRF-Token", csrf))
+                .andExpect(status().isNotFound());
+        mvc.perform(post("/portal/api/handoffs/{id}/close", own).session(session).header("X-CSRF-Token", csrf))
+                .andExpect(status().isNoContent());
+        mvc.perform(get("/portal/api/overview").session(session)).andExpect(status().isOk())
+                .andExpect(jsonPath("$.open_handoff_count").value(0));
+        assertThat(lineRepository.findOpenHandoffId(other.id(), "U-other")).contains(foreign);
+    }
+
+    @Test
     void platformAndTenantAuthenticationProtectTheApi() throws Exception {
         mvc.perform(post("/api/v1/tenants")
                         .header("X-Platform-Admin-Key", "wrong")
@@ -382,7 +492,8 @@ class ApplicationIntegrationTest {
                                     "name": "Portal onboarding",
                                     "slug": "%s",
                                     "timezone": "Asia/Taipei",
-                                    "slot_minutes": 30
+                                    "slot_minutes": 30,
+                                    "booking_enabled": true
                                   }
                                 }
                                 """
@@ -987,7 +1098,8 @@ class ApplicationIntegrationTest {
                                   "name": "Integration test",
                                   "slug": "%s",
                                   "timezone": "Asia/Taipei",
-                                  "slot_minutes": 60
+                                  "slot_minutes": 60,
+                                  "booking_enabled": true
                                 }
                                 """
                                 .formatted(slug)))

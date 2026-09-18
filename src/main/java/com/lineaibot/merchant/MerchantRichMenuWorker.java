@@ -25,6 +25,7 @@ public class MerchantRichMenuWorker {
         if (!properties.isLineApiEnabled() || !properties.isLineWorkerEnabled()) {
             return;
         }
+        richMenus.syncCustomerMenus();
         Instant now = Instant.now();
         richMenus.recoverStaleJobs(now.minus(2, ChronoUnit.MINUTES), now);
         for (String staffId : richMenus.findReadyStaffIds(now, BATCH_SIZE)) {

@@ -49,6 +49,7 @@ public class PublicBookingController {
             @RequestHeader(name = HttpHeaders.AUTHORIZATION, required = false)
                     String authorization) {
         var tenant = requireTenant(tenantSlug, authorization);
+        BookingManager.requireBookingEnabled(tenant);
         return new PublicBookingBootstrap(
                 tenant.name(),
                 tenant.slug(),

@@ -133,6 +133,8 @@ function showAuth() {
 }
 
 async function enterApp() {
+  $("#portal-reservations").replaceChildren();
+  $("#portal-handoffs").replaceChildren();
   $("#auth-view").classList.add("hidden");
   $("#app-view").classList.remove("hidden");
   $("#merchant-mini").innerHTML = `<strong>${escapeHtml(state.tenant.name)}</strong><br><small>${escapeHtml(state.tenant.slug)}</small>`;
@@ -339,12 +341,29 @@ async function editDocument(documentId) {
   form.elements.title.focus({ preventScroll: true });
 }
 
+function bookingEnabled() { return state.tenant?.booking_enabled !== false; }
+
+function renderFeatures() {
+  const enabled = bookingEnabled();
+  $("#features-form").elements.booking_enabled.checked = enabled;
+  $$("[data-booking-only]").forEach((el) => el.classList.toggle("hidden", !enabled));
+  $("#merchant-mode").textContent = enabled ? "客服＋預約" : "純客服";
+  $("#handoff-count").textContent = state.overview.open_handoff_count || 0;
+  $("#reservation-panel").classList.toggle("hidden", !enabled && !state.overview.has_reservations);
+  $("#reservation-panel-title").textContent = enabled ? "預約管理" : "既有預約管理";
+  $("#reservation-mode-copy").textContent = enabled ? "查看預約與處理取消。時段封鎖請從 LINE 開啟預約月曆。" : "已停止接受新預約；仍可查看與取消既有預約。";
+  $("#manager-role-guide").textContent = enabled ? "顯示「預約管理」，可處理預約與封鎖時段。" : "顯示店家資訊與待處理客服案件數。";
+  $("#viewer-role-guide").textContent = enabled ? "顯示「預約管理」，但只能查看行程。" : "可查看店家資訊與待處理客服案件數。";
+  if (!enabled && state.activeView === "services") switchView("settings");
+}
+
 function renderSettings() {
+  renderFeatures();
   $("#merchant-settings-summary").innerHTML = [
     ["商家名稱", state.tenant.name],
     ["網址代稱", state.tenant.slug],
     ["時區", state.tenant.timezone],
-    ["預約間隔", `${state.tenant.slot_minutes} 分鐘`],
+    ...(bookingEnabled() ? [["預約間隔", `${state.tenant.slot_minutes} 分鐘`]] : []),
   ].map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join("");
   const line = state.overview.line_channel;
   const configured = Boolean(line.configured);
@@ -568,7 +587,7 @@ function renderStaff() {
         </div>
         <button class="text-button danger staff-remove-button" data-remove-staff type="button">移除綁定</button>
       </div>
-      <p class="staff-menu-note">${escapeHtml(roleDescriptions[staff.role] || "依角色顯示對應的 LINE 管理入口。")}</p>
+      <p class="staff-menu-note">${escapeHtml(bookingEnabled() ? roleDescriptions[staff.role] : (staff.role === "OWNER" ? "個人選單顯示「管理後台」，可進入完整工作台。" : "個人選單提供店家資訊與客服案件數。"))}</p>
       <details class="staff-details">
         <summary>調整權限與通知</summary>
         <div class="staff-fields">
@@ -580,10 +599,10 @@ function renderStaff() {
               <option value="VIEWER" ${staff.role === "VIEWER" ? "selected" : ""}>檢視者</option>
             </select>
           </label>
-          <label>每日摘要時間<input data-staff-field="daily_summary_time" type="time" value="${escapeHtml((staff.daily_summary_time || "08:00").slice(0, 5))}"></label>
+          <label class="${!bookingEnabled() && !state.overview.has_reservations ? 'hidden' : ''}">每日摘要時間<input data-staff-field="daily_summary_time" type="time" value="${escapeHtml((staff.daily_summary_time || "08:00").slice(0, 5))}"></label>
         </div>
-        <div class="staff-checks">
-          <label><input data-staff-field="notify_new_booking" type="checkbox" ${staff.notify_new_booking ? "checked" : ""}>新預約通知</label>
+        <div class="staff-checks ${!bookingEnabled() && !state.overview.has_reservations ? 'hidden' : ''}">
+          <label class="${bookingEnabled() ? '' : 'hidden'}"><input data-staff-field="notify_new_booking" type="checkbox" ${staff.notify_new_booking ? "checked" : ""}>新預約通知</label>
           <label><input data-staff-field="notify_cancellation" type="checkbox" ${staff.notify_cancellation ? "checked" : ""}>取消預約通知</label>
           <label><input data-staff-field="daily_summary_enabled" type="checkbox" ${staff.daily_summary_enabled ? "checked" : ""}>每日預約摘要</label>
         </div>
@@ -594,6 +613,7 @@ function renderStaff() {
 }
 
 function switchView(name) {
+  if (name === "services" && !bookingEnabled()) name = "settings";
   state.activeView = name;
   $$(".view").forEach((view) => view.classList.add("hidden"));
   $(`#view-${name}`).classList.remove("hidden");
@@ -607,7 +627,7 @@ function switchView(name) {
     overview: ["MERCHANT OVERVIEW", "今天，讓客服再可靠一點。", "先看營運狀態，再處理最重要的下一步。"],
     knowledge: ["KNOWLEDGE STUDIO", "把經驗整理成可信的知識。", "編輯、索引與發布都集中在同一個工作區。"],
     tester: ["ANSWER LAB", "每次發布前，都先問一次。", "用顧客的角度確認回答內容、信心與引用來源。"],
-    staff: ["MERCHANT STAFF", "把日常預約管理留在 LINE。", "設定角色、通知與每位人員會看到的中文管理入口。"],
+    staff: ["MERCHANT STAFF", "店家人員與 LINE 管理入口", "設定角色、通知與每位人員會看到的中文管理入口。"],
     settings: ["MERCHANT SETTINGS", "商家設定", "查看基本資料與管理 LINE 串接。"],
     services: ["SERVICE CATALOG", "服務項目", "管理主服務、加購、時間、價格與開放狀態。"],
     line: ["LINE CONNECTION", "LINE 串接", "設定官方帳號憑證與確認連線狀態。"],
@@ -670,6 +690,75 @@ $("#login-form").addEventListener("submit", async (event) => {
   }
 });
 
+$("#onboard-form").elements.booking_enabled.addEventListener("change", (event) => {
+  $("#onboard-booking-options").classList.toggle("hidden", !event.target.checked);
+});
+
+$("#features-form").addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const form = event.currentTarget;
+  setSubmitting(form, true, "儲存中…");
+  try {
+    state.tenant = await api("/features", { method: "PUT", body: JSON.stringify({ booking_enabled: form.elements.booking_enabled.checked }) });
+    await refreshOverview();
+    renderStaff();
+    toast("功能已儲存，LINE 選單將在背景同步");
+  } catch (error) { toast(error.message, true); }
+  finally { setSubmitting(form, false); }
+});
+
+async function loadHandoffs() {
+  const tenantId = state.tenant.id;
+  const items = await api("/handoffs");
+  if (state.tenant?.id !== tenantId) return;
+  $("#portal-handoffs").innerHTML = items.length ? items.map((item) => `
+    <article class="reservation-row"><div><strong>${escapeHtml(item.reason)}</strong>
+    <p>案件編號：${escapeHtml(item.id)}</p>
+    <small>${escapeHtml(new Date(item.created_at).toLocaleString("zh-TW", { timeZone: state.tenant.timezone }))}</small></div>
+    <button class="secondary" data-close-handoff="${escapeHtml(item.id)}" type="button">標記已處理</button></article>`).join("") : "<p>目前沒有待處理案件。</p>";
+}
+$("#load-handoffs").addEventListener("click", async (event) => {
+  event.target.disabled = true;
+  try { await loadHandoffs(); } catch (error) { toast(error.message, true); }
+  finally { event.target.disabled = false; }
+});
+$("#portal-handoffs").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-close-handoff]");
+  if (!button) return;
+  button.disabled = true;
+  try {
+    await api(`/handoffs/${encodeURIComponent(button.dataset.closeHandoff)}/close`, { method: "POST" });
+    await Promise.all([loadHandoffs(), refreshOverview()]);
+    toast("案件已標記處理完成");
+  } catch (error) { toast(error.message, true); button.disabled = false; }
+});
+
+async function loadPortalReservations() {
+  const tenantId = state.tenant.id;
+  const items = await api("/reservations");
+  if (state.tenant?.id !== tenantId) return;
+  $("#portal-reservations").innerHTML = items.length ? items.map((item) => `
+    <article class="reservation-row"><div><strong>${escapeHtml(item.service_name)}</strong>
+    <p>${escapeHtml(item.customer_name || "未填姓名")} · ${escapeHtml(new Date(item.starts_at).toLocaleString("zh-TW", { timeZone: state.tenant.timezone }))}</p>
+    <small>${item.status === "CONFIRMED" ? "已確認" : "已取消"}</small></div>
+    ${item.status === "CONFIRMED" ? `<button class="secondary" data-cancel-reservation="${escapeHtml(item.id)}" type="button">取消預約</button>` : ""}</article>`).join("") : "<p>目前沒有預約。</p>";
+}
+$("#load-reservations").addEventListener("click", async (event) => {
+  event.target.disabled = true;
+  try { await loadPortalReservations(); } catch (error) { toast(error.message, true); }
+  finally { event.target.disabled = false; }
+});
+$("#portal-reservations").addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-cancel-reservation]");
+  if (!button || !confirm("確定取消這筆預約？系統會通知顧客。")) return;
+  button.disabled = true;
+  try {
+    await api(`/reservations/${encodeURIComponent(button.dataset.cancelReservation)}/cancel`, { method: "POST" });
+    await loadPortalReservations();
+    toast("預約已取消");
+  } catch (error) { toast(error.message, true); button.disabled = false; }
+});
+
 $("#onboard-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
@@ -685,12 +774,14 @@ $("#onboard-form").addEventListener("submit", async (event) => {
           slug: data.slug,
           timezone: data.timezone,
           slot_minutes: Number(data.slot_minutes),
+          booking_enabled: form.elements.booking_enabled.checked,
         },
       }),
     });
     state.csrfToken = session.csrf_token;
     state.tenant = session.tenant;
     form.reset();
+    $("#onboard-booking-options").classList.add("hidden");
     showTenantApiKey(session.tenant_api_key, session.tenant.id);
     await enterApp();
     toast("商家空間已建立");

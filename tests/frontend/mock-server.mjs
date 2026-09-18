@@ -41,9 +41,13 @@ let portalBookingAddOns;
 let portalHasDraft;
 let portalActiveVersion;
 let portalSessionExpired;
+let portalBookingEnabled = true;
+let portalHandoffs = [];
 
 function resetPortalFixture() {
   portalSessionExpired = false;
+  portalBookingEnabled = true;
+  portalHandoffs = [{ id: "ticket-1", reason: "詢問營業時間", created_at: "2026-09-18T02:00:00Z" }, { id: "ticket-2", reason: "詢問商品", created_at: "2026-09-18T03:00:00Z" }];
   portalHasDraft = false;
   portalActiveVersion = 3;
   portalDocuments = [{
@@ -98,7 +102,7 @@ function resetPortalFixture() {
 
 resetPortalFixture();
 
-function portalApi(url, request, response) {
+async function portalApi(url, request, response) {
   const pathname = url.pathname;
   if (!pathname.startsWith("/portal/api/")) return false;
   const endpoint = pathname.slice("/portal/api".length);
@@ -109,6 +113,7 @@ function portalApi(url, request, response) {
     slug: "demo",
     timezone: "Asia/Taipei",
     slot_minutes: 60,
+    booking_enabled: portalBookingEnabled,
   };
 
   if (endpoint === "/line-session" && request.method === "POST") {
@@ -143,9 +148,30 @@ function portalApi(url, request, response) {
     sendJson(response, 401, { detail: "請先登入商家工作台" });
     return true;
   }
+  if (endpoint === "/handoffs") {
+    sendJson(response, 200, portalHandoffs);
+    return true;
+  }
+  if (endpoint.startsWith("/handoffs/") && endpoint.endsWith("/close") && request.method === "POST") {
+    portalHandoffs = portalHandoffs.filter((item) => item.id !== endpoint.split("/")[2]);
+    sendEmpty(response);
+    return true;
+  }
+  if (endpoint === "/features" && request.method === "PUT") {
+    const data = await readJson(request);
+    portalBookingEnabled = data.booking_enabled;
+    sendJson(response, 200, { ...tenant, booking_enabled: portalBookingEnabled });
+    return true;
+  }
+  if (endpoint === "/reservations") {
+    sendJson(response, 200, [{ id: "legacy-reservation", service_name: "洗髮", customer_name: "王小姐", starts_at: "2026-10-01T02:00:00Z", status: "CONFIRMED" }]);
+    return true;
+  }
   if (endpoint === "/overview") {
     sendJson(response, 200, {
       tenant,
+      has_reservations: true,
+      open_handoff_count: portalHandoffs.length,
       line_channel: {
         configured: true,
         enabled: true,
@@ -523,7 +549,7 @@ async function serveStatic(pathname, response) {
 
 const server = createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || `${host}:${port}`}`);
-  if (portalApi(url, request, response)) return;
+  if (await portalApi(url, request, response)) return;
   if (bookingApi(url.pathname, url, request, response)) return;
   if (merchantApi(url.pathname, url, request, response)) return;
   await serveStatic(url.pathname, response);

@@ -27,6 +27,12 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class BookingManager {
 
+    public static void requireBookingEnabled(TenantRow tenant) {
+        if (!tenant.bookingEnabled()) {
+            throw new ApiException(HttpStatus.CONFLICT, "店家目前未開放線上預約，請聯絡店家。");
+        }
+    }
+
     public record BookingQuote(
             List<String> addOnIds, int durationMinutes, int totalPriceAmount) {}
 
@@ -75,6 +81,7 @@ public class BookingManager {
             List<String> addOnIds,
             LocalDate localDate,
             Instant now) {
+        requireBookingEnabled(tenant);
         Selection selection = resolveSelection(tenant.id(), serviceId, addOnIds);
         if (!selection.service().active()) {
             return List.of();
@@ -153,6 +160,7 @@ public class BookingManager {
         if (existing.isPresent()) {
             return existing.get();
         }
+        requireBookingEnabled(tenant);
         Selection selection = resolveSelection(tenant.id(), serviceId, addOnIds);
         if (!selection.service().active()) {
             throw new ApiException(
@@ -266,6 +274,7 @@ public class BookingManager {
 
     public BookingRepository.BookingBlockRow blockSlot(
             TenantRow tenant, Instant startsAt, String reason, String staffId) {
+        requireBookingEnabled(tenant);
         validateSlotAlignment(tenant, startsAt);
         Instant createdAt = Instant.now();
         try {

@@ -15,6 +15,48 @@ import org.springframework.stereotype.Repository;
 @Repository
 public class MerchantRichMenuRepository {
 
+    public record CustomerMenuJob(String tenantId, int revision) {}
+
+    public void requestCustomerSync(String tenantId) {
+        jdbc.sql("select id from tenants where id = :id for update").param("id", tenantId).query(String.class).single();
+        int changed = jdbc.sql("update customer_menu_sync set revision = revision + 1, next_attempt_at = current_timestamp where tenant_id = :id")
+                .param("id", tenantId).update();
+        if (changed == 0) {
+            jdbc.sql("insert into customer_menu_sync (tenant_id) values (:id)").param("id", tenantId).update();
+        }
+    }
+
+    public List<CustomerMenuJob> readyCustomerMenus(Instant now) {
+        return jdbc.sql("""
+                select sync.tenant_id, sync.revision from customer_menu_sync sync
+                join tenants tenant on tenant.id = sync.tenant_id and tenant.active = true
+                join line_channels channel on channel.tenant_id = sync.tenant_id and channel.enabled = true
+                where sync.synced_revision < sync.revision and sync.next_attempt_at <= :now
+                  and (sync.locked_until is null or sync.locked_until < :now)
+                order by sync.next_attempt_at limit 10
+                """).param("now", utc(now))
+                .query((rs, n) -> new CustomerMenuJob(rs.getString("tenant_id"), rs.getInt("revision"))).list();
+    }
+
+    public boolean claimCustomerMenu(CustomerMenuJob job, Instant now) {
+        return jdbc.sql("""
+                update customer_menu_sync set locked_until = :until
+                where tenant_id = :id and revision = :revision
+                  and (locked_until is null or locked_until < :now)
+                """).param("id", job.tenantId()).param("revision", job.revision())
+                .param("now", utc(now)).param("until", utc(now.plusSeconds(120))).update() == 1;
+    }
+
+    public void finishCustomerMenu(CustomerMenuJob job, boolean success, Instant now) {
+        jdbc.sql("""
+                update customer_menu_sync
+                set synced_revision = case when :success then greatest(synced_revision, :revision) else synced_revision end,
+                    locked_until = null, next_attempt_at = :next
+                where tenant_id = :id
+                """).param("id", job.tenantId()).param("revision", job.revision())
+                .param("success", success).param("next", utc(success ? now : now.plusSeconds(60))).update();
+    }
+
     public record SyncJob(
             String staffId,
             String tenantId,

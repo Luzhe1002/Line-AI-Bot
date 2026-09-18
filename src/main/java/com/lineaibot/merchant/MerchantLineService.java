@@ -31,16 +31,18 @@ public class MerchantLineService {
     private final MerchantBookingService bookings;
     private final MerchantManageTokenService manageTokens;
     private final AppProperties properties;
+    private final com.lineaibot.tenant.TenantRepository tenants;
 
     public MerchantLineService(
             MerchantStaffService staffService,
             MerchantBookingService bookings,
             MerchantManageTokenService manageTokens,
-            AppProperties properties) {
+            AppProperties properties, com.lineaibot.tenant.TenantRepository tenants) {
         this.staffService = staffService;
         this.bookings = bookings;
         this.manageTokens = manageTokens;
         this.properties = properties;
+        this.tenants = tenants;
     }
 
     public Optional<List<Map<String, Object>>> handleText(
@@ -53,7 +55,7 @@ public class MerchantLineService {
                         "管理員綁定成功！\n已綁定「"
                                 + staff.displayName()
                                 + "」的店家管理權限。\n"
-                                + "輸入「管理預約」即可開始使用。")));
+                                + (tenant.bookingEnabled() ? "輸入「管理預約」即可開始使用。" : "輸入「店家管理」即可開始使用。"))));
             } catch (ApiException exception) {
                 return Optional.of(List.of(textMessage(exception.getMessage())));
             }
@@ -91,6 +93,8 @@ public class MerchantLineService {
             return Optional.of(List.of(textMessage("這個 LINE 尚未綁定店家管理權限。")));
         }
         return Optional.of(switch (action) {
+            case "merchant_support" -> List.of(textMessage("目前有 " + tenants.openHandoffCount(tenant.id()) + " 件待處理人工客服案件，請至 LINE 官方帳號聊天室回覆顧客。"));
+            case "merchant_info" -> managementMenu(tenant, staff.get());
             case "merchant_agenda" -> agendaMessages(
                     tenant, staff.get(), values.getOrDefault("range", "today"));
             case "merchant_cancel_prompt" ->
@@ -111,6 +115,13 @@ public class MerchantLineService {
 
     private List<Map<String, Object>> managementMenu(
             TenantRow tenant, MerchantDtos.StaffView staff) {
+        if (!tenant.bookingEnabled()) {
+            List<Map<String, Object>> items = new ArrayList<>();
+            if ("OWNER".equals(staff.role())) items.add(postbackItem("管理後台", "action=merchant_portal"));
+            items.add(postbackItem("客服案件", "action=merchant_support"));
+            if (tenants.hasReservations(tenant.id())) items.add(uriItem("管理既有預約", manageUrl(tenant, staff)));
+            return List.of(withQuickReply(staff.displayName() + "，目前使用純客服模式。", items));
+        }
         String manageUrl = manageUrl(tenant, staff);
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", "text");

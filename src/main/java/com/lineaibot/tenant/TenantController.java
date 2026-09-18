@@ -65,6 +65,13 @@ public class TenantController {
         return auth.requireTenantAdmin(tenantId, apiKey).toRead();
     }
 
+    @PutMapping("/{tenantId}/features")
+    TenantRead updateFeatures(@PathVariable String tenantId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody TenantDtos.FeaturesUpdate request) {
+        return service.updateFeatures(auth.requireTenantAdmin(tenantId, apiKey), request);
+    }
+
     @PutMapping("/{tenantId}/line-channel")
     LineChannelRead configureLineChannel(
             @PathVariable String tenantId,

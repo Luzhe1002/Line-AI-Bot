@@ -24,6 +24,11 @@ public interface AiProvider {
 
     List<double[]> embedTexts(List<String> texts);
 
+    default GeneratedText generateAnswer(String question, List<GroundingContext> contexts,
+            String tenantName, String safetyIdentifier, boolean bookingEnabled) {
+        return generateAnswer(question, contexts, tenantName, safetyIdentifier);
+    }
+
     GeneratedText generateAnswer(
             String question,
             List<GroundingContext> contexts,

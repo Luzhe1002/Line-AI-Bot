@@ -27,10 +27,11 @@ public class TenantRepository {
             int slotMinutes,
             String adminApiKeyHash,
             boolean active,
-            Instant createdAt) {
+            Instant createdAt,
+            boolean bookingEnabled) {
 
         public TenantRead toRead() {
-            return new TenantRead(id, name, slug, timezone, slotMinutes, active, createdAt);
+            return new TenantRead(id, name, slug, timezone, slotMinutes, active, createdAt, bookingEnabled);
         }
     }
 
@@ -50,7 +51,7 @@ public class TenantRepository {
     public Optional<TenantRow> findById(String id) {
         return jdbc.sql("""
                         select id, slug, name, timezone, slot_minutes, admin_api_key_hash,
-                               active, created_at
+                               active, created_at, booking_enabled
                         from tenants where id = :id
                         """)
                 .param("id", id)
@@ -61,7 +62,7 @@ public class TenantRepository {
     public Optional<TenantRow> findActiveBySlug(String slug) {
         return jdbc.sql("""
                         select id, slug, name, timezone, slot_minutes, admin_api_key_hash,
-                               active, created_at
+                               active, created_at, booking_enabled
                         from tenants where slug = :slug and active = true
                         """)
                 .param("slug", slug)
@@ -72,7 +73,7 @@ public class TenantRepository {
     public List<TenantRead> findAll() {
         return jdbc.sql("""
                         select id, slug, name, timezone, slot_minutes, admin_api_key_hash,
-                               active, created_at
+                               active, created_at, booking_enabled
                         from tenants order by created_at
                         """)
                 .query((rs, rowNum) -> mapTenant(rs, rowNum).toRead())
@@ -83,10 +84,10 @@ public class TenantRepository {
         jdbc.sql("""
                         insert into tenants (
                             id, slug, name, timezone, slot_minutes, admin_api_key_hash,
-                            active, created_at, updated_at
+                            active, created_at, updated_at, booking_enabled
                         ) values (
                             :id, :slug, :name, :timezone, :slotMinutes, :hash,
-                            :active, :createdAt, :createdAt
+                            :active, :createdAt, :createdAt, :bookingEnabled
                         )
                         """)
                 .param("id", tenant.id())
@@ -95,9 +96,32 @@ public class TenantRepository {
                 .param("timezone", tenant.timezone())
                 .param("slotMinutes", tenant.slotMinutes())
                 .param("hash", tenant.adminApiKeyHash())
+                .param("bookingEnabled", tenant.bookingEnabled())
                 .param("active", tenant.active())
                 .param("createdAt", utc(tenant.createdAt()))
                 .update();
+    }
+
+    public void requireBookingEnabledForWrite(String tenantId) {
+        boolean enabled = jdbc.sql("select booking_enabled from tenants where id = :id for update")
+                .param("id", tenantId).query(Boolean.class).single();
+        if (!enabled) throw new com.lineaibot.shared.ApiException(
+                org.springframework.http.HttpStatus.CONFLICT, "店家目前未開放線上預約，請聯絡店家。");
+    }
+
+    public void setBookingEnabled(String tenantId, boolean enabled) {
+        jdbc.sql("update tenants set booking_enabled = :enabled, updated_at = current_timestamp where id = :id")
+                .param("id", tenantId).param("enabled", enabled).update();
+    }
+
+    public boolean hasReservations(String tenantId) {
+        return jdbc.sql("select count(*) from reservations where tenant_id = :id")
+                .param("id", tenantId).query(Long.class).single() > 0;
+    }
+
+    public long openHandoffCount(String tenantId) {
+        return jdbc.sql("select count(*) from handoff_tickets where tenant_id = :id and status = 'OPEN'")
+                .param("id", tenantId).query(Long.class).single();
     }
 
     public void insertDefaultBusinessHour(
@@ -528,7 +552,8 @@ public class TenantRepository {
                 rs.getInt("slot_minutes"),
                 rs.getString("admin_api_key_hash"),
                 rs.getBoolean("active"),
-                rs.getObject("created_at", OffsetDateTime.class).toInstant());
+                rs.getObject("created_at", OffsetDateTime.class).toInstant(),
+                rs.getBoolean("booking_enabled"));
     }
 
     private OffsetDateTime utc(Instant value) {

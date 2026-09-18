@@ -75,6 +75,23 @@ class MerchantBookingManagementIntegrationTest {
     }
 
     @Test
+    void supportModeKeepsCustomerSupportWithoutIssuingBookingLinks() throws Exception {
+        Tenant tenant = createTenant("support-line");
+        configureLineChannel(tenant);
+        mvc.perform(put("/api/v1/tenants/{id}/features", tenant.id())
+                .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON)
+                .content("{\"booking_enabled\":false}")).andExpect(status().isOk());
+        processLineText(tenant, "U-retail", "預約");
+        assertThat(latestOutbox(tenant.id(), "U-retail", "REPLY"))
+                .contains("未開放線上預約").doesNotContain("/booking/", "開啟預約頁");
+        processLineText(tenant, "U-retail", "查詢預約");
+        assertThat(latestOutbox(tenant.id(), "U-retail", "REPLY")).contains("目前沒有尚未結束的預約");
+        processLineText(tenant, "U-retail", "人工客服");
+        assertThat(jdbc.sql("select count(*) from handoff_tickets where tenant_id = :id and status = 'OPEN'")
+                .param("id", tenant.id()).query(Long.class).single()).isEqualTo(1);
+    }
+
+    @Test
     void bookingIntentOnlyOpensTheNamedBookingPage() throws Exception {
         Tenant tenant = createTenant("named-booking");
         configureLineChannel(tenant);
@@ -685,7 +702,8 @@ class MerchantBookingManagementIntegrationTest {
                                   "name": "Merchant management test",
                                   "slug": "%s",
                                   "timezone": "Asia/Taipei",
-                                  "slot_minutes": 60
+                                  "slot_minutes": 60,
+                                  "booking_enabled": true
                                 }
                                 """
                                 .formatted(slug)))

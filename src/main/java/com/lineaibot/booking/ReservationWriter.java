@@ -10,11 +10,13 @@ public class ReservationWriter {
 
     private final BookingRepository repository;
     private final BookingEventRepository events;
+    private final com.lineaibot.tenant.TenantRepository tenants;
 
     public ReservationWriter(
-            BookingRepository repository, BookingEventRepository events) {
+            BookingRepository repository, BookingEventRepository events, com.lineaibot.tenant.TenantRepository tenants) {
         this.repository = repository;
         this.events = events;
+        this.tenants = tenants;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -23,6 +25,7 @@ public class ReservationWriter {
             int slotMinutes,
             String actorType,
             String actorId) {
+        tenants.requireBookingEnabledForWrite(reservation.tenantId());
         repository.insert(reservation);
         for (var addOn : reservation.addOns()) {
             repository.insertReservationAddOn(

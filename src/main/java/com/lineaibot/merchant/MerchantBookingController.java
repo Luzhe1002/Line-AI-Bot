@@ -119,7 +119,7 @@ public class MerchantBookingController {
                 context.staff(),
                 bookingRepository.findActiveServices(context.tenant().id()).stream()
                         .map(service -> new ServiceOption(service.id(), service.name()))
-                        .toList());
+                        .toList(), context.tenant().bookingEnabled());
     }
 
     @GetMapping("/agenda")

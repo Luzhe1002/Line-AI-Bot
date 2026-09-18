@@ -182,6 +182,24 @@ public class LineRepository {
                 .update();
     }
 
+    public record HandoffRead(String id, String reason, Instant createdAt) {}
+
+    public List<HandoffRead> listOpenHandoffs(String tenantId) {
+        return jdbc.sql("""
+                select id, reason, created_at from handoff_tickets
+                where tenant_id = :id and status = 'OPEN' order by created_at limit 100
+                """).param("id", tenantId).query((rs, n) -> new HandoffRead(
+                        rs.getString("id"), rs.getString("reason"),
+                        rs.getObject("created_at", OffsetDateTime.class).toInstant())).list();
+    }
+
+    public boolean closeHandoff(String tenantId, String ticketId) {
+        return jdbc.sql("""
+                update handoff_tickets set status = 'CLOSED', closed_at = current_timestamp
+                where tenant_id = :tenantId and id = :ticketId and status = 'OPEN'
+                """).param("tenantId", tenantId).param("ticketId", ticketId).update() == 1;
+    }
+
     public Optional<String> findOpenHandoffId(String tenantId, String lineUserId) {
         return jdbc.sql("""
                         select id from handoff_tickets

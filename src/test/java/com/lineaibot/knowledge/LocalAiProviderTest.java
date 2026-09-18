@@ -10,6 +10,14 @@ import org.junit.jupiter.api.Test;
 class LocalAiProviderTest {
 
     @Test
+    void supportModeDoesNotRepeatOutdatedBookingInstructions() {
+        var provider = new LocalAiProvider(new AppProperties());
+        var context = new GroundingContext("chunk", "doc", "舊資料", "請點擊線上預約連結建立預約。", null, 0.9);
+        var answer = provider.generateAnswer("如何使用服務？", List.of(context), "店家", "safe", false);
+        assertThat(answer.text()).contains("聯絡店家").doesNotContain("預約連結", "建立預約");
+    }
+
+    @Test
     void answersWithOnlyTheSentenceRelevantToTheQuestion() {
         var provider = new LocalAiProvider(new AppProperties());
         var context = new GroundingContext(

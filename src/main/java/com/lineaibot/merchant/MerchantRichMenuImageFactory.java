@@ -102,6 +102,16 @@ public class MerchantRichMenuImageFactory {
     }
 
     static List<String> labelsForRole(String role) {
+        if (role.startsWith("CUSTOMER")) {
+            boolean booking = role.equals("CUSTOMER_BOOKING");
+            return List.of(booking ? "立即預約" : "商品與服務", booking ? "選擇服務時段" : "了解店家提供的內容",
+                    "營業資訊", "時間與店家資訊", booking ? "查詢預約" : "常見問題",
+                    booking ? "查看既有預約" : "詢問客服", "聯絡店家", "轉接人工客服");
+        }
+        if (role.endsWith("_SUPPORT")) {
+            return List.of(role.startsWith("OWNER") ? "管理後台" : "店家資訊", "店家客服工作台",
+                    "客服案件", "查看待處理數量", "營業資訊", "時間與店家資訊", "商品與服務", "了解店家提供的內容");
+        }
         boolean owner = "OWNER".equals(role);
         return List.of(
                 owner ? "管理後台" : "預約管理",

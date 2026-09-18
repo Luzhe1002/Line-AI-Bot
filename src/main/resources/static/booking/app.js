@@ -342,7 +342,7 @@
     document.querySelector("#fatal-message").textContent =
       error.message === "連結缺少預約憑證"
         ? "預約連結不完整，請回到 LINE 重新輸入「預約」。"
-        : "預約連結可能已失效，請回到 LINE 重新輸入「預約」。";
+        : (error.message.includes("未開放線上預約") ? error.message : "預約連結可能已失效，請回到 LINE 重新輸入「預約」。");
     fatalError.querySelector("h2").focus({ preventScroll: true });
   });
 })();

@@ -60,6 +60,15 @@ public class ConversationService {
     public List<Map<String, Object>> handleText(
             TenantRow tenant, String lineUserId, String text) {
         recordInbound(tenant.id(), lineUserId, "text", text);
+        if ("查詢預約".equals(text.strip()) || "我的預約".equals(text.strip())) {
+            var existing = bookings.upcomingReservations(tenant.id(), lineUserId, 10);
+            var messages = List.of(textMessage(existing.isEmpty() ? "目前沒有尚未結束的預約。"
+                    : existing.stream().map(item -> item.serviceName() + " "
+                        + SLOT_LABEL.format(item.startsAt().atZone(ZoneId.of(tenant.timezone()))))
+                        .collect(java.util.stream.Collectors.joining("\n")) + "\n需要取消請輸入「取消預約」。"));
+            recordOutbound(tenant.id(), lineUserId, messages);
+            return messages;
+        }
         List<Map<String, Object>> messages = switch (classifier.classify(text)) {
             case HUMAN_HANDOFF ->
                     createHandoff(tenant, lineUserId, "使用者要求人工客服");
@@ -88,6 +97,9 @@ public class ConversationService {
     }
 
     private List<Map<String, Object>> bookingOptions(TenantRow tenant, String lineUserId) {
+        if (!tenant.bookingEnabled()) {
+            return List.of(textMessage("店家目前未開放線上預約。您可以詢問商品、服務或營業資訊，或輸入「人工客服」聯絡店家。"));
+        }
         var services = bookingRepository.findActiveServices(tenant.id());
         if (services.isEmpty()) {
             return List.of(textMessage("商家尚未設定可預約服務，請聯絡人工客服。"));
