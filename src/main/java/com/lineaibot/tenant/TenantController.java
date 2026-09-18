@@ -3,6 +3,10 @@ package com.lineaibot.tenant;
 import com.lineaibot.shared.ApiAuthService;
 import com.lineaibot.tenant.TenantDtos.BookingServiceCreate;
 import com.lineaibot.tenant.TenantDtos.BookingServiceRead;
+import com.lineaibot.tenant.TenantDtos.BookingServiceUpdate;
+import com.lineaibot.tenant.TenantDtos.BookingAddOnCreate;
+import com.lineaibot.tenant.TenantDtos.BookingAddOnRead;
+import com.lineaibot.tenant.TenantDtos.BookingAddOnUpdate;
 import com.lineaibot.tenant.TenantDtos.BusinessHourRead;
 import com.lineaibot.tenant.TenantDtos.BusinessHourUpsert;
 import com.lineaibot.tenant.TenantDtos.LineChannelRead;
@@ -108,5 +112,60 @@ public class TenantController {
             @PathVariable String tenantId,
             @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey) {
         return service.listBookingServices(auth.requireTenantAdmin(tenantId, apiKey));
+    }
+
+    @PutMapping("/{tenantId}/booking-services/{serviceId}")
+    BookingServiceRead updateBookingService(
+            @PathVariable String tenantId,
+            @PathVariable String serviceId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingServiceUpdate request) {
+        return service.updateBookingService(
+                auth.requireTenantAdmin(tenantId, apiKey), serviceId, request);
+    }
+
+
+    @PostMapping("/{tenantId}/booking-services/{serviceId}/add-ons")
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingAddOnRead createServiceAddOn(
+            @PathVariable String tenantId, @PathVariable String serviceId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingAddOnCreate request) {
+        return service.createServiceAddOn(auth.requireTenantAdmin(tenantId, apiKey), serviceId, request);
+    }
+
+    @PutMapping("/{tenantId}/booking-services/{serviceId}/add-ons/{addOnId}")
+    BookingAddOnRead updateServiceAddOn(
+            @PathVariable String tenantId, @PathVariable String serviceId, @PathVariable String addOnId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingAddOnUpdate request) {
+        return service.updateServiceAddOn(auth.requireTenantAdmin(tenantId, apiKey), serviceId, addOnId, request);
+    }
+
+    @PostMapping("/{tenantId}/booking-add-ons")
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingAddOnRead createBookingAddOn(
+            @PathVariable String tenantId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingAddOnCreate request) {
+        return service.createBookingAddOn(
+                auth.requireTenantAdmin(tenantId, apiKey), request);
+    }
+
+    @GetMapping("/{tenantId}/booking-add-ons")
+    List<BookingAddOnRead> listBookingAddOns(
+            @PathVariable String tenantId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey) {
+        return service.listBookingAddOns(auth.requireTenantAdmin(tenantId, apiKey));
+    }
+
+    @PutMapping("/{tenantId}/booking-add-ons/{addOnId}")
+    BookingAddOnRead updateBookingAddOn(
+            @PathVariable String tenantId,
+            @PathVariable String addOnId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingAddOnUpdate request) {
+        return service.updateBookingAddOn(
+                auth.requireTenantAdmin(tenantId, apiKey), addOnId, request);
     }
 }

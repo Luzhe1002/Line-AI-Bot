@@ -18,16 +18,28 @@ public class ReservationWriter {
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void insert(ReservationRead reservation, String actorType, String actorId) {
+    public void insert(
+            ReservationRead reservation,
+            int slotMinutes,
+            String actorType,
+            String actorId) {
         repository.insert(reservation);
-        repository.insertSlotOccupancy(
-                java.util.UUID.randomUUID().toString(),
-                reservation.tenantId(),
-                reservation.startsAt(),
-                reservation.endsAt(),
-                "RESERVATION",
-                reservation.id(),
-                reservation.createdAt());
+        for (var addOn : reservation.addOns()) {
+            repository.insertReservationAddOn(
+                    reservation.tenantId(), reservation.id(), addOn, reservation.createdAt());
+        }
+        for (java.time.Instant slotStart = reservation.startsAt();
+                slotStart.isBefore(reservation.endsAt());
+                slotStart = slotStart.plus(slotMinutes, java.time.temporal.ChronoUnit.MINUTES)) {
+            repository.insertSlotOccupancy(
+                    java.util.UUID.randomUUID().toString(),
+                    reservation.tenantId(),
+                    slotStart,
+                    slotStart.plus(slotMinutes, java.time.temporal.ChronoUnit.MINUTES),
+                    "RESERVATION",
+                    reservation.id(),
+                    reservation.createdAt());
+        }
         events.insertEvent(
                 reservation.tenantId(),
                 reservation.id(),

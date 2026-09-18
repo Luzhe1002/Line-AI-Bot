@@ -19,6 +19,10 @@ import com.lineaibot.shared.ApiAuthService;
 import com.lineaibot.shared.ApiException;
 import com.lineaibot.tenant.TenantDtos.BookingServiceCreate;
 import com.lineaibot.tenant.TenantDtos.BookingServiceRead;
+import com.lineaibot.tenant.TenantDtos.BookingServiceUpdate;
+import com.lineaibot.tenant.TenantDtos.BookingAddOnCreate;
+import com.lineaibot.tenant.TenantDtos.BookingAddOnRead;
+import com.lineaibot.tenant.TenantDtos.BookingAddOnUpdate;
 import com.lineaibot.tenant.TenantDtos.BusinessHourRead;
 import com.lineaibot.tenant.TenantDtos.BusinessHourUpsert;
 import com.lineaibot.tenant.TenantDtos.LineChannelRead;
@@ -101,6 +105,7 @@ public class PortalController {
             LineChannelRead lineChannel,
             List<BusinessHourRead> businessHours,
             List<BookingServiceRead> bookingServices,
+            List<BookingAddOnRead> bookingAddOns,
             List<DatasetRead> datasets) {}
 
     @PostMapping("/session")
@@ -171,6 +176,7 @@ public class PortalController {
                 tenants.getLineChannel(tenant),
                 tenants.listBusinessHours(tenant),
                 tenants.listBookingServices(tenant),
+                tenants.listBookingAddOns(tenant),
                 knowledge.listDatasets(tenant));
     }
 
@@ -200,6 +206,56 @@ public class PortalController {
             @Valid @RequestBody BookingServiceCreate request) {
         requireCsrf(session, csrfToken);
         return tenants.createBookingService(requireTenant(session), request);
+    }
+
+    @PutMapping("/booking-services/{serviceId}")
+    BookingServiceRead updateBookingService(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @PathVariable String serviceId,
+            @Valid @RequestBody BookingServiceUpdate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.updateBookingService(requireTenant(session), serviceId, request);
+    }
+
+
+    @PostMapping("/booking-services/{serviceId}/add-ons")
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingAddOnRead createServiceAddOn(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session, @PathVariable String serviceId,
+            @Valid @RequestBody BookingAddOnCreate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.createServiceAddOn(requireTenant(session), serviceId, request);
+    }
+
+    @PutMapping("/booking-services/{serviceId}/add-ons/{addOnId}")
+    BookingAddOnRead updateServiceAddOn(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session, @PathVariable String serviceId, @PathVariable String addOnId,
+            @Valid @RequestBody BookingAddOnUpdate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.updateServiceAddOn(requireTenant(session), serviceId, addOnId, request);
+    }
+
+    @PostMapping("/booking-add-ons")
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingAddOnRead createBookingAddOn(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @Valid @RequestBody BookingAddOnCreate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.createBookingAddOn(requireTenant(session), request);
+    }
+
+    @PutMapping("/booking-add-ons/{addOnId}")
+    BookingAddOnRead updateBookingAddOn(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @PathVariable String addOnId,
+            @Valid @RequestBody BookingAddOnUpdate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.updateBookingAddOn(requireTenant(session), addOnId, request);
     }
 
     @GetMapping("/staff")

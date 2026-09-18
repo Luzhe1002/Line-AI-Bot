@@ -149,6 +149,8 @@ public class BookingNotificationProcessor {
                 + time
                 + "\n"
                 + customerName
+                + "\n服務："
+                + selectionLabel(reservation)
                 + "\n預約編號："
                 + shortId(reservation.id());
         List<Map<String, Object>> items = new ArrayList<>();
@@ -178,6 +180,8 @@ public class BookingNotificationProcessor {
                     + time
                     + "\n預約姓名："
                     + customerName
+                    + "\n服務："
+                    + selectionLabel(reservation)
                     + "\n預約編號："
                     + shortId(reservation.id());
         } else {
@@ -216,5 +220,16 @@ public class BookingNotificationProcessor {
 
     private String shortId(String id) {
         return id.substring(0, Math.min(id.length(), 8)).toUpperCase();
+    }
+
+    private String selectionLabel(BookingDtos.ReservationRead reservation) {
+        if (reservation.addOns().isEmpty()) {
+            return reservation.serviceName();
+        }
+        return reservation.serviceName()
+                + "＋"
+                + reservation.addOns().stream()
+                        .map(BookingDtos.ReservationAddOnRead::name)
+                        .collect(java.util.stream.Collectors.joining("＋"));
     }
 }

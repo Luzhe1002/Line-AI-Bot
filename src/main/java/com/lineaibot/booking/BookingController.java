@@ -35,14 +35,19 @@ public class BookingController {
             @PathVariable String tenantId,
             @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
             @RequestParam(name = "service_id") String serviceId,
+            @RequestParam(name = "add_on_ids", required = false) List<String> addOnIds,
             @RequestParam(name = "local_date") LocalDate localDate) {
         var tenant = auth.requireTenantAdmin(tenantId, apiKey);
+        var quote = bookings.quote(tenant.id(), serviceId, addOnIds);
         return new AvailabilityResponse(
                 tenant.id(),
                 serviceId,
+                quote.addOnIds(),
                 localDate,
                 tenant.timezone(),
-                bookings.listAvailableSlots(tenant, serviceId, localDate));
+                quote.durationMinutes(),
+                quote.totalPriceAmount(),
+                bookings.listAvailableSlots(tenant, serviceId, addOnIds, localDate));
     }
 
     @PostMapping("/reservations")

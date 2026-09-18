@@ -86,12 +86,20 @@ Production 展示站不公開 Swagger／OpenAPI；本機開發預設保留 `/doc
 
 ## 主要功能
 
+工作台的「服務項目」集中管理主服務與加購。
+服務項目預設顯示清單，點選新增才開啟表單。新增後會提供下一步提示，
+每個主服務下可直接新增、編輯或停用自己的加購，新增即自動綁定；不同主服務的
+同名加購可設定不同價格與時間，修改互不影響。
+「商家設定」顯示基本資料，並提供獨立「LINE 串接」頁的入口。LINE 登入工作台仍限 OWNER，管理金鑰
+持有人可管理商家；本次分頁調整不擴大 MANAGER 或 VIEWER 的存取權限。
+
 - 多租戶資料隔離，每個商家有獨立管理 API Key。
 - Platform Admin、Tenant Admin 與店家人員角色驗證。
 - LINE Channel Secret 與 Access Token 加密保存。
 - LINE 原始 Body HMAC-SHA256 簽章驗證及 `tenant_id + webhookEventId` 去重。
 - 持久化 `line_events`、有界 Virtual Thread Worker、失敗重試與 LINE Outbox 稽核。
-- 一對一時段預約、冪等建立、取消釋放時段及店家封鎖共同占用限制。
+- 可設定主服務與多選加購、依組合計算時間與價格，並以連續時段占用維持一對一預約。
+- 預約冪等建立、取消釋放時段及店家封鎖共同占用限制。
 - LINE 文字意圖、預約入口、取消確認、人工客服工單及店家管理指令。
 - 店家人員綁定、角色專屬個人圖文選單、預約查詢、主動通知、每日摘要及手機月曆。
 - 知識庫草稿、文件切塊、索引、重新索引、版本發布、租戶限定檢索與引用。
@@ -349,7 +357,8 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 更新分組。Java 21 Docker build／runtime image 由人工規劃升級，避免自動跨 JDK major。
 
 測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、
-店家人員綁定、LINE 預約查詢與取消、通知事件、單次管理 Session、封鎖時段、
+主服務與加購的時間價格快照及連續時段占用、店家人員綁定、LINE 預約查詢與取消、
+通知事件、單次管理 Session、封鎖時段、
 知識庫隔離、LINE 原始 Body 簽章、事件去重及模擬 Outbox。
 
 原 FastAPI 驗證仍可另外執行，但只代表舊版參考實作：
@@ -372,6 +381,10 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 | `POST /api/v1/tenants` | 建立商家並取得只顯示一次的管理 API Key |
 | `PUT /api/v1/tenants/{id}/line-channel` | 設定 LINE Channel |
 | `PUT /api/v1/tenants/{id}/business-hours` | 設定每週營業時間 |
+| `GET/POST /api/v1/tenants/{id}/booking-services` | 查詢或建立含時間、價格與可用加購的主服務 |
+| `PUT /api/v1/tenants/{id}/booking-services/{serviceId}` | 更新主服務與可選加購 |
+| `POST /api/v1/tenants/{id}/booking-services/{serviceId}/add-ons` | 新增並自動綁定此主服務的加購 |
+| `PUT /api/v1/tenants/{id}/booking-services/{serviceId}/add-ons/{addOnId}` | 編輯或停用此主服務的加購 |
 | `GET /api/v1/tenants/{id}/availability` | 查詢指定日期可預約時段 |
 | `POST /api/v1/tenants/{id}/reservations` | 建立預約 |
 | `POST /api/v1/tenants/{id}/reservations/{id}/cancel` | 取消預約 |

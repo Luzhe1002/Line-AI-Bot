@@ -4,6 +4,7 @@
 @tenantKey = replace-after-create
 @datasetId = replace-after-list
 @serviceId = replace-after-list
+@addOnId = replace-after-create
 @reservationId = replace-after-create
 @ownerPortalToken = issued-only-after-owner-rich-menu-postback
 
@@ -59,8 +60,34 @@ X-Tenant-Api-Key: {{tenantKey}}
 GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/booking-services
 X-Tenant-Api-Key: {{tenantKey}}
 
+### Create an add-on owned by this service - saves and attaches atomically
+POST {{baseUrl}}/api/v1/tenants/{{tenantId}}/booking-services/{{serviceId}}/add-ons
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "name": "護髮",
+  "description": "保濕護理",
+  "duration_minutes": 60,
+  "price_amount": 500
+}
+
+### Update a service, retaining its attached add-on
+PUT {{baseUrl}}/api/v1/tenants/{{tenantId}}/booking-services/{{serviceId}}
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{
+  "name": "洗頭",
+  "description": "基礎洗髮服務",
+  "duration_minutes": 60,
+  "price_amount": 300,
+  "active": true,
+  "add_on_ids": ["{{addOnId}}"]
+}
+
 ### Query availability
-GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/availability?service_id={{serviceId}}&local_date=2026-07-24
+GET {{baseUrl}}/api/v1/tenants/{{tenantId}}/availability?service_id={{serviceId}}&add_on_ids={{addOnId}}&local_date=2026-07-24
 X-Tenant-Api-Key: {{tenantKey}}
 
 ### Create reservation
@@ -70,6 +97,7 @@ X-Tenant-Api-Key: {{tenantKey}}
 
 {
   "service_id": "{{serviceId}}",
+  "add_on_ids": ["{{addOnId}}"],
   "line_user_id": "U-example-user",
   "customer_name": "王小明",
   "starts_at": "2026-07-24T02:00:00Z",
@@ -88,7 +116,7 @@ GET {{baseUrl}}/booking/api/{tenantSlug}/bootstrap
 Authorization: Bearer {{bookingToken}}
 
 ###
-GET {{baseUrl}}/booking/api/{tenantSlug}/availability?service_id={{serviceId}}&local_date=2026-08-03
+GET {{baseUrl}}/booking/api/{tenantSlug}/availability?service_id={{serviceId}}&add_on_ids={{addOnId}}&local_date=2026-08-03
 Authorization: Bearer {{bookingToken}}
 
 ###
@@ -98,6 +126,7 @@ Content-Type: application/json
 
 {
   "service_id": "{{serviceId}}",
+  "add_on_ids": ["{{addOnId}}"],
   "starts_at": "2026-08-03T10:00:00+08:00",
   "customer_name": "王小明",
   "idempotency_key": "web-demo-booking-0001"

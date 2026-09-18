@@ -559,7 +559,9 @@ class MerchantBookingManagementIntegrationTest {
                 eventType,
                 lineUserId,
                 payload,
-                Instant.now());
+                // The fixture must already be due, independent of clock resolution
+                // and database microsecond rounding on Windows.
+                Instant.now().minusSeconds(1));
         assertThat(lineRepository.claimEvent(id, Instant.now())).isTrue();
         lineEventProcessor.process(id);
         assertThat(lineRepository.findEvent(id).orElseThrow().status())

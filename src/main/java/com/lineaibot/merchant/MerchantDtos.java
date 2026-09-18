@@ -1,6 +1,7 @@
 package com.lineaibot.merchant;
 
 import com.lineaibot.booking.BookingDtos.AvailabilitySlot;
+import com.lineaibot.booking.BookingDtos.ReservationAddOnRead;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 import java.time.Instant;
@@ -64,9 +65,12 @@ public final class MerchantDtos {
             String id,
             String serviceId,
             String serviceName,
+            List<ReservationAddOnRead> addOns,
             String customerName,
             Instant startsAt,
             Instant endsAt,
+            int totalDurationMinutes,
+            int totalPriceAmount,
             String status,
             Instant createdAt) {}
 
