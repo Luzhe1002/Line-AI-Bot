@@ -71,7 +71,8 @@ public class LineMessagingClient {
                 lineUserId,
                 "REPLY",
                 messages,
-                payload);
+                payload,
+                "reply:" + tenantId + ":" + replyToken);
     }
 
     public boolean pushFailedReplyIfPresent(
@@ -89,7 +90,8 @@ public class LineMessagingClient {
                                 lineUserId,
                                 "PUSH",
                                 objectMapper.readTree(payload),
-                                payload);
+                                payload,
+                                "reply-push:" + tenantId + ":" + replyToken);
                         return true;
                     } catch (JacksonException exception) {
                         throw new IllegalStateException(
