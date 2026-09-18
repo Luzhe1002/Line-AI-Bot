@@ -227,6 +227,25 @@ function portalApi(url, request, response) {
     sendJson(response, 200, portalDocuments);
     return true;
   }
+  const ownedAddOn = endpoint.match(/^\/booking-services\/([^/]+)\/add-ons(?:\/([^/]+))?$/);
+  if (ownedAddOn && ["POST", "PUT"].includes(request.method)) {
+    readJson(request).then((body) => {
+      const service = portalBookingServices.find((item) => item.id === ownedAddOn[1]);
+      if (!service) return sendJson(response, 404, { detail: "Service not found" });
+      if (request.method === "POST") {
+        const addOn = { id: `add-on-${portalBookingAddOns.length + 1}`, ...body, active: true };
+        portalBookingAddOns.push(addOn);
+        service.add_ons.push(addOn);
+        sendJson(response, 201, addOn);
+      } else {
+        const addOn = service.add_ons.find((item) => item.id === ownedAddOn[2]);
+        if (!addOn) return sendJson(response, 404, { detail: "Add-on not found" });
+        Object.assign(addOn, body);
+        sendJson(response, 200, addOn);
+      }
+    });
+    return true;
+  }
   if (endpoint === "/booking-add-ons" && request.method === "POST") {
     readJson(request).then((body) => {
       const addOn = {

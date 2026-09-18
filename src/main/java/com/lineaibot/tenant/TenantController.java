@@ -124,6 +124,24 @@ public class TenantController {
                 auth.requireTenantAdmin(tenantId, apiKey), serviceId, request);
     }
 
+
+    @PostMapping("/{tenantId}/booking-services/{serviceId}/add-ons")
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingAddOnRead createServiceAddOn(
+            @PathVariable String tenantId, @PathVariable String serviceId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingAddOnCreate request) {
+        return service.createServiceAddOn(auth.requireTenantAdmin(tenantId, apiKey), serviceId, request);
+    }
+
+    @PutMapping("/{tenantId}/booking-services/{serviceId}/add-ons/{addOnId}")
+    BookingAddOnRead updateServiceAddOn(
+            @PathVariable String tenantId, @PathVariable String serviceId, @PathVariable String addOnId,
+            @RequestHeader(name = "X-Tenant-Api-Key", required = false) String apiKey,
+            @Valid @RequestBody BookingAddOnUpdate request) {
+        return service.updateServiceAddOn(auth.requireTenantAdmin(tenantId, apiKey), serviceId, addOnId, request);
+    }
+
     @PostMapping("/{tenantId}/booking-add-ons")
     @ResponseStatus(HttpStatus.CREATED)
     BookingAddOnRead createBookingAddOn(

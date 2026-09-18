@@ -88,7 +88,8 @@ Production 展示站不公開 Swagger／OpenAPI；本機開發預設保留 `/doc
 
 工作台的「服務項目」集中管理主服務與加購。
 服務項目預設顯示清單，點選新增才開啟表單。新增後會提供下一步提示，
-加購清單可查看適用服務與「尚未套用」狀態，並前往主服務完成加購設定。
+每個主服務下可直接新增、編輯或停用自己的加購，新增即自動綁定；不同主服務的
+同名加購可設定不同價格與時間，修改互不影響。
 「商家設定」顯示基本資料，並提供獨立「LINE 串接」頁的入口。LINE 登入工作台仍限 OWNER，管理金鑰
 持有人可管理商家；本次分頁調整不擴大 MANAGER 或 VIEWER 的存取權限。
 
@@ -370,8 +371,8 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 | `PUT /api/v1/tenants/{id}/business-hours` | 設定每週營業時間 |
 | `GET/POST /api/v1/tenants/{id}/booking-services` | 查詢或建立含時間、價格與可用加購的主服務 |
 | `PUT /api/v1/tenants/{id}/booking-services/{serviceId}` | 更新主服務與可選加購 |
-| `GET/POST /api/v1/tenants/{id}/booking-add-ons` | 查詢或建立可重複使用的加購項目 |
-| `PUT /api/v1/tenants/{id}/booking-add-ons/{addOnId}` | 更新或停用加購項目 |
+| `POST /api/v1/tenants/{id}/booking-services/{serviceId}/add-ons` | 新增並自動綁定此主服務的加購 |
+| `PUT /api/v1/tenants/{id}/booking-services/{serviceId}/add-ons/{addOnId}` | 編輯或停用此主服務的加購 |
 | `GET /api/v1/tenants/{id}/availability` | 查詢指定日期可預約時段 |
 | `POST /api/v1/tenants/{id}/reservations` | 建立預約 |
 | `POST /api/v1/tenants/{id}/reservations/{id}/cancel` | 取消預約 |

@@ -244,6 +244,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-
 .booking-catalog-grid { margin-top: 20px; }
 #catalog-feedback { margin-top: 20px; border: 2px solid var(--green); }
 .catalog-card { min-width: 0; border: 1px solid var(--line); border-radius: 14px; background: white; }
+.catalog-heading { display: flex; justify-content: space-between; gap: 14px; align-items: start; }
+.service-addons { padding: 16px; background: var(--mint); border-radius: 0 0 14px 14px; }
+.service-addons > .catalog-item { margin-bottom: 12px; }
 .catalog-card .catalog-item { border: 0; }
 .catalog-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 0 16px 16px; }
 .catalog-actions > .catalog-status { flex-basis: 100%; order: -1; border-radius: 6px; }
@@ -252,6 +255,7 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-
 .catalog-card .option-fieldset > button { margin: 4px; max-width: 100%; white-space: normal; }
 @media (max-width: 600px) {
   .catalog-card summary { flex-direction: column; align-items: flex-start; }
+  .catalog-heading { flex-direction: column; }
   .catalog-status { white-space: normal; }
   .catalog-toolbar #catalog-create { width: 100%; margin-left: 0; }
   .catalog-actions button { flex: 1; }

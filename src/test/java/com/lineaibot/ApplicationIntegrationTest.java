@@ -555,6 +555,46 @@ class ApplicationIntegrationTest {
     }
 
     @Test
+    void serviceOwnedAddOnsCannotBeSharedOrEditedAcrossServices() throws Exception {
+        Tenant tenant = createTenant("owned-addons");
+        String base = "/api/v1/tenants/" + tenant.id();
+        String first = firstId(getJson(base + "/booking-services", tenant.apiKey()));
+        String second = json(mvc.perform(post(base + "/booking-services")
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"剪髮\",\"duration_minutes\":60,\"price_amount\":600}"))
+                .andExpect(status().isCreated()).andReturn()).path("id").asText();
+        String payload = "{\"name\":\"護髮\",\"duration_minutes\":60,\"price_amount\":500}";
+        String firstAddOn = json(mvc.perform(post(base + "/booking-services/" + first + "/add-ons")
+                        .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated()).andReturn()).path("id").asText();
+        String secondAddOn = json(mvc.perform(post(base + "/booking-services/" + second + "/add-ons")
+                        .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON).content(payload))
+                .andExpect(status().isCreated()).andReturn()).path("id").asText();
+        assertThat(firstAddOn).isNotEqualTo(secondAddOn);
+        String update = "{\"name\":\"護髮\",\"duration_minutes\":60,\"price_amount\":800,\"active\":true}";
+        mvc.perform(put(base + "/booking-services/" + first + "/add-ons/" + firstAddOn)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.price_amount").value(800));
+        mvc.perform(put(base + "/booking-services/" + second + "/add-ons/" + firstAddOn)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isNotFound());
+        mvc.perform(put(base + "/booking-add-ons/" + firstAddOn)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isConflict());
+        mvc.perform(put(base + "/booking-services/" + second)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()).contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"剪髮\",\"duration_minutes\":60,\"price_amount\":600,\"active\":true,\"add_on_ids\":[\"" + firstAddOn + "\"]}"))
+                .andExpect(status().isUnprocessableEntity());
+        Tenant other = createTenant("owned-addons-other");
+        mvc.perform(put("/api/v1/tenants/" + other.id() + "/booking-services/" + first + "/add-ons/" + firstAddOn)
+                        .header("X-Tenant-Api-Key", other.apiKey()).contentType(MediaType.APPLICATION_JSON).content(update))
+                .andExpect(status().isNotFound());
+        assertThat(jdbc.sql("select price_amount from booking_add_ons where id = :id")
+                .param("id", secondAddOn).query(Integer.class).single()).isEqualTo(500);
+    }
+
+    @Test
     void bookingAddOnsChangePriceDurationAndReserveEveryCoveredSlot() throws Exception {
         Tenant tenant = createTenant("booking-add-ons");
         JsonNode addOn = json(mvc.perform(post(

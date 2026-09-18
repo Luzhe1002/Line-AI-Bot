@@ -146,57 +146,50 @@ test("connected LINE channel marks every setup step complete", async ({ page }) 
   await expect(page.locator("#line-setup-status")).toContainText("LINE 設定已完成");
 });
 
-test("merchant can create a reusable add-on and attach it to a service", async ({ page }) => {
+test("merchant manages independent add-ons inside each service", async ({ page }) => {
   await page.setViewportSize({ width: 375, height: 812 });
   await page.goto("/portal/#token=e2e-token");
   await page.getByRole("button", { name: "服務項目", exact: true }).click();
-  await expect(page.locator("#line-form")).toBeHidden();
+  await expect(page.getByRole("button", { name: "加購項目", exact: true })).toHaveCount(0);
+  const first = page.locator(".catalog-card").filter({ hasText: "洗頭" });
+  await first.getByRole("button", { name: "管理加購", exact: true }).click();
+  await first.getByRole("button", { name: "新增加購", exact: true }).click();
+  const form = page.locator("#add-on-form");
+  await form.getByLabel("加購名稱").fill("頭皮按摩");
+  await form.getByLabel("增加時間（分鐘）").fill("60");
+  await form.getByLabel("增加費用（NT$）").fill("200");
+  await form.getByRole("button", { name: "新增加購", exact: true }).click();
+  await expect(page.locator("#catalog-feedback")).toContainText("已新增並綁定");
+  await expect(first.locator(".catalog-heading")).toContainText("2 個加購");
 
-  const addOnForm = page.locator("#add-on-form");
-  await expect(addOnForm).toBeHidden();
-  await expect(page.locator("#booking-service-form")).toBeHidden();
-  await page.getByRole("button", { name: "加購項目", exact: true }).click();
   await page.locator("#catalog-create").click();
-  await addOnForm.getByLabel("加購名稱").fill("頭皮按摩");
-  await addOnForm.getByLabel("增加時間（分鐘）").fill("60");
-  await addOnForm.getByLabel("增加費用（NT$）").fill("200");
-  await addOnForm.getByRole("button", { name: "新增加購" }).click();
-  await expect(page.locator("#booking-add-on-list")).toContainText("頭皮按摩");
-  await expect(page.locator("#catalog-feedback")).toContainText("請選擇適用服務");
-  await page.locator("#catalog-feedback").getByRole("button", { name: "選擇適用服務" }).click();
-  const addon = page.locator("[data-add-on-id]").filter({ hasText: "頭皮按摩" });
-  await addon.getByRole("button", { name: "洗頭（未套用）" }).click();
-  const existingService = page.locator("[data-service-id]").filter({ hasText: "洗頭" });
-  await existingService.getByLabel(/頭皮按摩/).check();
-  await existingService.getByRole("button", { name: "儲存主服務" }).click();
-  await expect(existingService).toContainText("2 個加購");
-
   const serviceForm = page.locator("#booking-service-form");
-  await page.locator("#catalog-create").click();
-  await serviceForm.getByLabel("服務名稱").fill("頭皮洗護");
-  await serviceForm.getByLabel("基本時間（分鐘）").fill("60");
+  await serviceForm.getByLabel("服務名稱").fill("剪髮");
   await serviceForm.getByLabel("基本價格（NT$）").fill("600");
-  await serviceForm.getByLabel(/頭皮按摩/).check();
   await serviceForm.getByRole("button", { name: "新增主服務" }).click();
-
-  const created = page.locator("#booking-service-list .catalog-item")
-    .filter({ hasText: "頭皮洗護" });
-  await expect(created).toContainText("1 個加購");
-  await expect(page.locator("#catalog-feedback")).toContainText("已開放預約");
-  const card = page.locator(".catalog-card").filter({ has: page.locator('[data-service-id]') }).filter({ hasText: "頭皮洗護" });
-  await expect(card.getByRole("button", { name: "編輯", exact: true })).toBeVisible();
-  await card.getByRole("button", { name: "編輯", exact: true }).click();
-  await card.getByLabel("基本價格（NT$）").fill("900");
-  await card.getByRole("button", { name: "取消編輯" }).click();
-  await card.getByRole("button", { name: "編輯", exact: true }).click();
-  await expect(card.getByLabel("基本價格（NT$）")).toHaveValue("600");
-  await card.getByLabel("基本價格（NT$）").fill("700");
-  await card.getByRole("button", { name: "儲存主服務" }).click();
-  await expect(card.locator("summary")).toContainText("700");
-  await expect(card).toContainText("剛剛更新");
-  await expect(page.locator("#catalog-feedback")).toContainText("已儲存");
+  const second = page.locator(".catalog-card").filter({ hasText: "剪髮" });
+  await second.getByRole("button", { name: "管理加購", exact: true }).click();
+  await second.getByRole("button", { name: "新增加購", exact: true }).click();
+  await form.getByLabel("加購名稱").fill("頭皮按摩");
+  await form.getByLabel("增加費用（NT$）").fill("300");
+  await form.getByRole("button", { name: "新增加購", exact: true }).click();
+  const addon = second.locator("[data-add-on-id]").filter({ hasText: "頭皮按摩" });
+  await addon.locator("summary").click();
+  await addon.getByLabel("增加費用（NT$）").fill("400");
+  await addon.getByRole("button", { name: "儲存加購", exact: true }).click();
+  await expect(addon.locator("summary")).toContainText("400");
+  await first.getByRole("button", { name: "管理加購", exact: true }).click();
+  await expect(first.locator("[data-add-on-id]").filter({ hasText: "頭皮按摩" }).locator("summary")).toContainText("200");
+  await second.getByRole("button", { name: "編輯主服務", exact: true }).click();
+  await second.getByLabel("基本價格（NT$）").fill("900");
+  await second.getByRole("button", { name: "取消編輯", exact: true }).click();
+  await second.getByRole("button", { name: "編輯主服務", exact: true }).click();
+  await expect(second.getByLabel("基本價格（NT$）")).toHaveValue("600");
+  await second.getByRole("button", { name: "儲存主服務", exact: true }).click();
+  await expect(second.locator(".catalog-heading")).toContainText("1 個加購");
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  await page.screenshot({ path: "test-results/catalog-mobile.png", fullPage: true });
+  await second.getByRole("button", { name: "管理加購", exact: true }).click();
+  await page.screenshot({ path: "test-results/service-owned-addons.png", fullPage: true });
 });
 
 test("portal operations dashboard stays within a 375px mobile viewport", async ({ page }) => {

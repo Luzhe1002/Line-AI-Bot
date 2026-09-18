@@ -218,6 +218,26 @@ public class PortalController {
         return tenants.updateBookingService(requireTenant(session), serviceId, request);
     }
 
+
+    @PostMapping("/booking-services/{serviceId}/add-ons")
+    @ResponseStatus(HttpStatus.CREATED)
+    BookingAddOnRead createServiceAddOn(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session, @PathVariable String serviceId,
+            @Valid @RequestBody BookingAddOnCreate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.createServiceAddOn(requireTenant(session), serviceId, request);
+    }
+
+    @PutMapping("/booking-services/{serviceId}/add-ons/{addOnId}")
+    BookingAddOnRead updateServiceAddOn(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session, @PathVariable String serviceId, @PathVariable String addOnId,
+            @Valid @RequestBody BookingAddOnUpdate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.updateServiceAddOn(requireTenant(session), serviceId, addOnId, request);
+    }
+
     @PostMapping("/booking-add-ons")
     @ResponseStatus(HttpStatus.CREATED)
     BookingAddOnRead createBookingAddOn(

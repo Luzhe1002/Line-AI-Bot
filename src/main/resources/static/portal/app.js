@@ -381,118 +381,89 @@ function formatMoney(amount) {
   }).format(amount || 0);
 }
 
-function addOnOptions(selectedIds = [], includeInactive = false) {
-  const selected = new Set(selectedIds);
-  const addOns = (state.overview.booking_add_ons || [])
-    .filter((item) => includeInactive || item.active);
-  if (!addOns.length) {
-    return '<p class="muted">尚無加購項目。可以先儲存主服務，再到「加購項目」新增。</p>';
-  }
-  return addOns.map((item) => `
-    <label class="option-check">
-      <input type="checkbox" value="${escapeHtml(item.id)}" ${selected.has(item.id) ? "checked" : ""}>
-      <span>${escapeHtml(item.name)}${item.active ? "" : "（已停用）"} · +${item.duration_minutes} 分鐘 · +${escapeHtml(formatMoney(item.price_amount))}</span>
-    </label>`).join("");
+function addOnFields(addOn = {}) {
+  return `<label>加購名稱<input name="name" maxlength="160" required value="${escapeHtml(addOn.name || "")}"></label>
+    <label>說明<textarea name="description" maxlength="2000">${escapeHtml(addOn.description || "")}</textarea></label>
+    <div class="two-col">
+      <label>增加時間（分鐘）<input name="duration_minutes" type="number" min="0" max="1440" step="${state.tenant.slot_minutes}" required value="${addOn.duration_minutes || 0}"></label>
+      <label>增加費用（NT$）<input name="price_amount" type="number" min="0" required value="${addOn.price_amount || 0}"></label>
+    </div>
+    <label class="switch-row"><input name="active" type="checkbox" ${addOn.active ? "checked" : ""}><span>開放顧客加購</span></label>`;
 }
 
 function renderBookingSettings() {
-  const services = state.overview.booking_services || [];
-  const addOns = state.overview.booking_add_ons || [];
-  const slotMinutes = state.tenant.slot_minutes;
-  const serviceForm = $("#booking-service-form");
+  // Keep the single creation form alive when replacing a service card.
   const addOnForm = $("#add-on-form");
-  [serviceForm.elements.duration_minutes, addOnForm.elements.duration_minutes]
-    .forEach((input) => { input.step = String(slotMinutes); });
-  serviceForm.elements.duration_minutes.min = String(slotMinutes);
-  if (!serviceForm.elements.duration_minutes.value) {
-    serviceForm.elements.duration_minutes.value = String(slotMinutes);
-  }
-  if (!addOnForm.elements.duration_minutes.value) {
-    addOnForm.elements.duration_minutes.value = String(slotMinutes);
-  }
-  $("#service-add-on-options").innerHTML = addOnOptions();
-
-  $("#booking-service-list").innerHTML = services.length
-    ? services.map((service) => {
-      const selectedIds = (service.add_ons || []).map((item) => item.id);
-      return `
-        <article class="catalog-card">
-        <details class="catalog-item ${service.active ? "" : "inactive"}" data-service-id="${escapeHtml(service.id)}">
-          <summary>
-            <span class="catalog-title"><strong>${escapeHtml(service.name)}</strong><small class="catalog-meta">${service.duration_minutes} 分鐘 · ${escapeHtml(formatMoney(service.price_amount))} · ${(service.add_ons || []).length} 個加購</small><small>加購：${escapeHtml((service.add_ons || []).map((item) => item.name).join("、") || "無，可直接預約")}</small></span>
-            <span class="catalog-status">${service.active ? "開放預約" : "已停用，顧客看不到"}</span>
-          </summary>
-          <div class="catalog-edit">
-            <p class="muted">已設定加購：${escapeHtml((service.add_ons || []).map((item) => item.name).join("、") || "無（可直接預約主服務）")}</p>
-            <label>服務名稱<input name="name" maxlength="160" required value="${escapeHtml(service.name)}"></label>
-            <label>說明<textarea name="description" maxlength="2000" rows="3">${escapeHtml(service.description || "")}</textarea></label>
-            <div class="two-col">
-              <label>基本時間（分鐘）<input name="duration_minutes" type="number" min="${slotMinutes}" max="1440" step="${slotMinutes}" required value="${service.duration_minutes}"></label>
-              <label>基本價格（NT$）<input name="price_amount" type="number" min="0" required value="${service.price_amount}"></label>
-            </div>
-            <fieldset class="option-fieldset"><legend>可提供的加購</legend><div class="option-checks" data-service-add-ons>${addOnOptions(selectedIds, true)}</div></fieldset>
-            <label class="switch-row"><input name="active" type="checkbox" ${service.active ? "checked" : ""}><span>開放顧客預約</span></label>
-            <button class="primary compact" data-save-service type="button">儲存主服務</button>
-            <button class="secondary" data-cancel-catalog-edit type="button">取消編輯</button>
+  $(".booking-catalog-grid").append(addOnForm);
+  addOnForm.classList.add("hidden");
+  const slot = state.tenant.slot_minutes;
+  const form = $("#booking-service-form");
+  form.elements.duration_minutes.min = String(slot);
+  form.elements.duration_minutes.step = String(slot);
+  if (!form.elements.duration_minutes.value) form.elements.duration_minutes.value = String(slot);
+  addOnForm.elements.duration_minutes.step = String(slot);
+  if (!addOnForm.elements.duration_minutes.value) addOnForm.elements.duration_minutes.value = "0";
+  $("#booking-service-list").innerHTML = (state.overview.booking_services || []).map((service) => `
+    <article class="catalog-card" data-service-id="${escapeHtml(service.id)}">
+      <div class="catalog-item">
+        <div class="catalog-heading">
+          <div class="catalog-title"><strong>${escapeHtml(service.name)}</strong>
+            <small>${service.duration_minutes} 分鐘 · ${escapeHtml(formatMoney(service.price_amount))}</small>
+            <small>${service.add_ons.length} 個加購：${escapeHtml(service.add_ons.map((a) => a.name + (a.active ? "" : "（已停用）")).join("、") || "目前無加購，可直接預約")}</small>
           </div>
-        </details>
-        <div class="catalog-actions"><button class="secondary" data-edit-catalog type="button">編輯</button><button class="secondary" data-edit-catalog="relations" type="button">設定加購</button></div>
-        </article>`;
-    }).join("")
-    : '<div class="catalog-empty">尚無主服務。建立後顧客即可在預約頁選擇。</div>';
-
-  $("#booking-add-on-list").innerHTML = addOns.length
-    ? addOns.map((addOn) => `
-      <article class="catalog-card">
-      <details class="catalog-item ${addOn.active ? "" : "inactive"}" data-add-on-id="${escapeHtml(addOn.id)}">
-        <summary>
-          <span class="catalog-title"><strong>${escapeHtml(addOn.name)}</strong><small class="catalog-meta">+${addOn.duration_minutes} 分鐘 · +${escapeHtml(formatMoney(addOn.price_amount))}</small><small>適用服務：${escapeHtml(services.filter((service) => (service.add_ons || []).some((item) => item.id === addOn.id)).map((service) => `${service.name}${service.active ? "" : "（已停用）"}`).join("、") || "尚未套用，顧客尚無法選擇" )}</small></span>
-          <span class="catalog-status">${addOn.active ? (services.some((service) => (service.add_ons || []).some((item) => item.id === addOn.id)) ? "已套用" : "尚未套用") : "已停用，顧客看不到"}</span>
-        </summary>
-        <div class="catalog-edit">
-          <label>加購名稱<input name="name" maxlength="160" required value="${escapeHtml(addOn.name)}"></label>
-          <label>說明<textarea name="description" maxlength="2000" rows="3">${escapeHtml(addOn.description || "")}</textarea></label>
-          <div class="two-col">
-            <label>增加時間（分鐘）<input name="duration_minutes" type="number" min="0" max="1440" step="${slotMinutes}" required value="${addOn.duration_minutes}"></label>
-            <label>增加費用（NT$）<input name="price_amount" type="number" min="0" required value="${addOn.price_amount}"></label>
-          </div>
-          <label class="switch-row"><input name="active" type="checkbox" ${addOn.active ? "checked" : ""}><span>允許顧客加購</span></label>
-          <button class="primary compact" data-save-add-on type="button">儲存加購</button>
-          <button class="secondary" data-cancel-catalog-edit type="button">取消編輯</button>
-          <fieldset class="option-fieldset"><legend>選擇適用服務</legend>
-            <p class="muted">選擇主服務後，勾選此加購並儲存。每項主服務可獨立設定。</p>
-            ${services.length ? services.map((service) => `<button class="secondary" type="button" data-link-service="${escapeHtml(service.id)}">${escapeHtml(service.name)}${(service.add_ons || []).some((item) => item.id === addOn.id) ? "（已套用）" : "（未套用）"}</button>`).join("") : '<p>尚無主服務，請切換至「主服務」建立。</p>'}
-          </fieldset>
+          <span class="catalog-status">${service.active ? "開放預約" : "已停用，顧客看不到"}</span>
         </div>
-      </details>
-      <div class="catalog-actions"><button class="secondary" data-edit-catalog type="button">編輯</button><button class="secondary" data-edit-catalog="relations" type="button">選擇適用服務</button></div>
-      </article>`).join("")
-    : '<div class="catalog-empty">尚無加購項目。可先建立「護髮」等選項，再加入主服務。</div>';
+        <div class="catalog-edit hidden" data-service-editor>
+          <label>服務名稱<input name="name" maxlength="160" required value="${escapeHtml(service.name)}"></label>
+          <label>說明<textarea name="description" maxlength="2000">${escapeHtml(service.description || "")}</textarea></label>
+          <div class="two-col">
+            <label>基本時間（分鐘）<input name="duration_minutes" type="number" min="${slot}" max="1440" step="${slot}" required value="${service.duration_minutes}"></label>
+            <label>基本價格（NT$）<input name="price_amount" type="number" min="0" required value="${service.price_amount}"></label>
+          </div>
+          <label class="switch-row"><input name="active" type="checkbox" ${service.active ? "checked" : ""}><span>開放顧客預約</span></label>
+          <button class="primary" data-save-service type="button">儲存主服務</button>
+          <button class="secondary" data-cancel-catalog-edit type="button">取消編輯</button>
+        </div>
+      </div>
+      <div class="catalog-actions">
+        <button class="secondary" data-edit-service type="button">編輯主服務</button>
+        <button class="secondary" data-manage-addons type="button" aria-expanded="false">管理加購</button>
+      </div>
+      <section class="service-addons hidden" aria-label="${escapeHtml(service.name)}的加購">
+        <h4>${escapeHtml(service.name)}的加購</h4>
+        <p class="muted">只適用於這個主服務。儲存後自動提供給顧客，不需另外綁定。</p>
+        ${service.add_ons.length ? service.add_ons.map((a) => `
+          <details class="catalog-item" data-add-on-id="${escapeHtml(a.id)}">
+            <summary><span class="catalog-title"><strong>${escapeHtml(a.name)}</strong><small>+${a.duration_minutes} 分鐘 · +${escapeHtml(formatMoney(a.price_amount))}</small></span><span class="catalog-status">${a.active ? "可加購" : "已停用"} · 編輯</span></summary>
+            <div class="catalog-edit">${addOnFields(a)}
+              <button class="primary" data-save-owned-addon type="button">儲存加購</button>
+              <button class="secondary" data-cancel-catalog-edit type="button">取消編輯</button>
+            </div>
+          </details>`).join("") : '<p class="catalog-empty">目前無加購，可直接預約主服務。</p>'}
+        <button class="secondary" data-new-owned-addon type="button">新增加購</button>
+      </section>
+    </article>`).join("") || '<p class="catalog-empty">尚無主服務，點選「新增主服務」開始設定。</p>';
 }
 
-let catalogCategory = "services";
-function selectCatalog(category) {
-  catalogCategory = category;
-  $("#service-catalog-panel").classList.toggle("hidden", category !== "services");
-  $("#addon-catalog-panel").classList.toggle("hidden", category !== "addons");
-  $$('[data-catalog]').forEach((button) => button.setAttribute("aria-pressed", String(button.dataset.catalog === category)));
-  $("#catalog-create").textContent = category === "services" ? "新增主服務" : "新增加購";
-  $("#booking-service-form").classList.add("hidden");
-  $("#add-on-form").classList.add("hidden");
+function showServiceAddOns(id) {
+  const card = $$(".catalog-card").find((item) => item.dataset.serviceId === id);
+  if (!card) return;
+  card.querySelector(".service-addons").classList.remove("hidden");
+  card.querySelector("[data-manage-addons]").setAttribute("aria-expanded", "true");
+  card.querySelector("[data-new-owned-addon]").focus();
 }
-$$('[data-catalog]').forEach((button) => button.addEventListener("click", () => selectCatalog(button.dataset.catalog)));
 $("#catalog-create").addEventListener("click", () => {
-  const form = $(catalogCategory === "services" ? "#booking-service-form" : "#add-on-form");
-  form.classList.remove("hidden");
-  form.querySelector("input").focus();
-  form.scrollIntoView({ block: "start" });
+  $("#booking-service-form").classList.remove("hidden");
+  $("#booking-service-form input").focus();
 });
-$$('[data-close-catalog]').forEach((button) => button.addEventListener("click", () => {
-  button.closest("form").classList.add("hidden");
-  $("#catalog-create").focus();
+$$("[data-close-catalog]").forEach((button) => button.addEventListener("click", () => {
+  const form = button.closest("form");
+  form.classList.add("hidden");
+  const card = form.closest(".catalog-card");
+  (card?.querySelector("[data-new-owned-addon]") || $("#catalog-create")).focus();
 }));
-function catalogSaved(message, category, id) {
-  selectCatalog(category);
+function catalogSaved(message, serviceId) {
+  $("#booking-service-form").classList.add("hidden");
   const feedback = $("#catalog-feedback");
   feedback.replaceChildren();
   const copy = document.createElement("p");
@@ -500,62 +471,69 @@ function catalogSaved(message, category, id) {
   const next = document.createElement("button");
   next.type = "button";
   next.className = "secondary";
-  next.textContent = category === "addons" ? "選擇適用服務" : "設定加購";
-  next.addEventListener("click", () => {
-    selectCatalog(category);
-    const item = [...document.querySelectorAll(category === "addons" ? "[data-add-on-id]" : "[data-service-id]")]
-      .find((element) => (category === "addons" ? element.dataset.addOnId : element.dataset.serviceId) === id);
-    if (!item) return;
-    item.open = true;
-    item.querySelector("fieldset").scrollIntoView({ block: "center" });
-    item.querySelector("fieldset button, fieldset input")?.focus();
-  });
+  next.textContent = "管理此服務的加購";
+  next.addEventListener("click", () => showServiceAddOns(serviceId));
   feedback.append(copy, next);
   feedback.classList.remove("hidden");
-  $$(".catalog-card").forEach((card) => {
-    const details = card.querySelector("details");
-    const updated = (category === "addons" ? details.dataset.addOnId : details.dataset.serviceId) === id;
-    card.classList.toggle("catalog-updated", updated);
-    if (updated) {
-      const badge = document.createElement("span");
-      badge.className = "catalog-status";
-      badge.textContent = "剛剛更新";
-      card.querySelector(".catalog-actions").append(badge);
-    }
-  });
+  $$(".catalog-card").forEach((card) => card.classList.toggle("catalog-updated", card.dataset.serviceId === serviceId));
   feedback.focus();
 }
-$("#view-services").addEventListener("click", (event) => {
-  const edit = event.target.closest("[data-edit-catalog]");
-  if (edit) {
-    const item = edit.closest(".catalog-card").querySelector("details");
-    item.open = true;
-    const target = edit.dataset.editCatalog === "relations" ? item.querySelector("fieldset") : item.querySelector(".catalog-edit");
-    target.querySelector("input, button")?.focus();
-    target.scrollIntoView({ block: "center" });
+$("#booking-service-list").addEventListener("click", async (event) => {
+  const card = event.target.closest(".catalog-card");
+  if (!card) return;
+  const serviceId = card.dataset.serviceId;
+  if (event.target.closest("[data-edit-service]")) {
+    const editor = card.querySelector("[data-service-editor]");
+    editor.classList.remove("hidden");
+    editor.querySelector("input").focus();
+  }
+  if (event.target.closest("[data-manage-addons]")) {
+    const panel = card.querySelector(".service-addons");
+    panel.classList.toggle("hidden");
+    card.querySelector("[data-manage-addons]").setAttribute("aria-expanded", String(!panel.classList.contains("hidden")));
+  }
+  if (event.target.closest("[data-new-owned-addon]")) {
+    const form = $("#add-on-form");
+    form.reset();
+    form.dataset.serviceId = serviceId;
+    form.querySelector("h3").textContent = `新增「${state.overview.booking_services.find((s) => s.id === serviceId).name}」的加購`;
+    form.elements.duration_minutes.value = "0";
+    card.querySelector(".service-addons").append(form);
+    form.classList.remove("hidden");
+    form.querySelector("input").focus();
   }
   const cancel = event.target.closest("[data-cancel-catalog-edit]");
   if (cancel) {
-    const item = cancel.closest("details");
-    const editor = item.querySelector(".catalog-edit");
+    const editor = cancel.closest(".catalog-edit");
     editor.querySelectorAll("input, textarea").forEach((input) => {
       if (input.type === "checkbox") input.checked = input.defaultChecked;
       else input.value = input.defaultValue;
     });
-    item.open = false;
-    item.closest(".catalog-card").querySelector("[data-edit-catalog]").focus();
+    const details = editor.closest("details");
+    if (details) { details.open = false; details.querySelector("summary").focus(); }
+    else { editor.classList.add("hidden"); card.querySelector("[data-edit-service]").focus(); }
   }
-});
-$("#booking-add-on-list").addEventListener("click", (event) => {
-  const button = event.target.closest("[data-link-service]");
-  if (!button) return;
-  const addOnId = button.closest("[data-add-on-id]").dataset.addOnId;
-  selectCatalog("services");
-  const item = [...document.querySelectorAll("[data-service-id]")].find((element) => element.dataset.serviceId === button.dataset.linkService);
-  item.open = true;
-  const checkbox = [...item.querySelectorAll("[data-service-add-ons] input")].find((input) => input.value === addOnId);
-  checkbox?.focus();
-  item.scrollIntoView({ block: "start" });
+  const save = event.target.closest("[data-save-owned-addon]");
+  if (save) {
+    const editor = save.closest(".catalog-edit");
+    if (![...editor.querySelectorAll("input, textarea")].every((input) => input.reportValidity())) return;
+    const field = (name) => editor.querySelector(`[name="${name}"]`);
+    const addOnId = save.closest("[data-add-on-id]").dataset.addOnId;
+    save.disabled = true;
+    save.textContent = "儲存中…";
+    try {
+      await api(`/booking-services/${encodeURIComponent(serviceId)}/add-ons/${encodeURIComponent(addOnId)}`, {
+        method: "PUT",
+        body: JSON.stringify({ name: field("name").value.trim(), description: field("description").value.trim() || null,
+          duration_minutes: Number(field("duration_minutes").value), price_amount: Number(field("price_amount").value),
+          active: field("active").checked }),
+      });
+      await refreshOverview();
+      catalogSaved("加購已儲存，只影響這個主服務。已成立的預約內容不變。", serviceId);
+      showServiceAddOns(serviceId);
+    } catch (error) { toast(error.message, true); }
+    finally { save.disabled = false; save.textContent = "儲存加購"; }
+  }
 });
 
 async function loadStaff() {
@@ -1004,7 +982,7 @@ $("#add-on-form").addEventListener("submit", async (event) => {
   const data = formData(form);
   setSubmitting(form, true, "新增中…");
   try {
-    const created = await api("/booking-add-ons", {
+    const created = await api(`/booking-services/${encodeURIComponent(form.dataset.serviceId)}/add-ons`, {
       method: "POST",
       body: JSON.stringify({
         name: data.name.trim(),
@@ -1016,7 +994,8 @@ $("#add-on-form").addEventListener("submit", async (event) => {
     form.reset();
     await refreshOverview();
     toast("加購項目已新增");
-    catalogSaved(`${created.name}已新增。請選擇適用服務，顧客才會看到這個加購。`, "addons", created.id);
+    catalogSaved(`${created.name}已新增並綁定此主服務。主服務開放預約時，顧客即可選擇。`, form.dataset.serviceId);
+    showServiceAddOns(form.dataset.serviceId);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -1028,7 +1007,6 @@ $("#booking-service-form").addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.currentTarget;
   const data = formData(form);
-  const addOnIds = $$("#service-add-on-options input:checked").map((input) => input.value);
   setSubmitting(form, true, "新增中…");
   try {
     const created = await api("/booking-services", {
@@ -1038,13 +1016,13 @@ $("#booking-service-form").addEventListener("submit", async (event) => {
         description: data.description.trim() || null,
         duration_minutes: Number(data.duration_minutes),
         price_amount: Number(data.price_amount),
-        add_on_ids: addOnIds,
+        add_on_ids: [],
       }),
     });
     form.reset();
     await refreshOverview();
     toast("主服務已新增");
-    catalogSaved(`${created.name}已開放預約。你可以設定加購，也可以直接提供主服務。`, "services", created.id);
+    catalogSaved(`${created.name}已開放預約。可在此服務下新增加購，也可直接提供主服務。`, created.id);
   } catch (error) {
     toast(error.message, true);
   } finally {
@@ -1071,48 +1049,18 @@ $("#booking-service-list").addEventListener("click", async (event) => {
         duration_minutes: Number(field("duration_minutes").value),
         price_amount: Number(field("price_amount").value),
         active: field("active").checked,
-        add_on_ids: [...editor.querySelectorAll("[data-service-add-ons] input:checked")]
-          .map((input) => input.value),
+        add_on_ids: state.overview.booking_services.find((service) => service.id === item.dataset.serviceId).add_ons.map((a) => a.id),
       }),
     });
     await refreshOverview();
     toast("主服務設定已儲存");
-    catalogSaved(`${field("name").value.trim()}已儲存。${field("active").checked ? "顧客可選擇此主服務與已啟用的加購。" : "此服務已停用，顧客預約頁不會顯示。"}`, "services", item.dataset.serviceId);
+    catalogSaved(`${field("name").value.trim()}已儲存。${field("active").checked ? "顧客可選擇此主服務與已啟用的加購。" : "此服務已停用，顧客預約頁不會顯示。"}`, item.dataset.serviceId);
   } catch (error) {
     toast(error.message, true);
     button.disabled = false;
   }
 });
 
-$("#booking-add-on-list").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-save-add-on]");
-  if (!button) return;
-  const item = button.closest("[data-add-on-id]");
-  const editor = button.closest(".catalog-edit");
-  const invalid = [...editor.querySelectorAll("input, textarea")]
-    .find((input) => !input.checkValidity());
-  if (invalid) return invalid.reportValidity();
-  const field = (name) => editor.querySelector(`[name="${name}"]`);
-  button.disabled = true;
-  try {
-    await api(`/booking-add-ons/${encodeURIComponent(item.dataset.addOnId)}`, {
-      method: "PUT",
-      body: JSON.stringify({
-        name: field("name").value.trim(),
-        description: field("description").value.trim() || null,
-        duration_minutes: Number(field("duration_minutes").value),
-        price_amount: Number(field("price_amount").value),
-        active: field("active").checked,
-      }),
-    });
-    await refreshOverview();
-    toast("加購設定已儲存");
-    catalogSaved(`${field("name").value.trim()}已儲存。${field("active").checked ? "可在下方確認適用服務。" : "此加購已停用，顧客預約頁不會顯示。"}`, "addons", item.dataset.addOnId);
-  } catch (error) {
-    toast(error.message, true);
-    button.disabled = false;
-  }
-});
 
 $("#publish-button").addEventListener("click", async () => {
   const datasetId = state.selectedDatasetId;

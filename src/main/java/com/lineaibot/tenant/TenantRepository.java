@@ -438,7 +438,17 @@ public class TenantRepository {
                 .list();
     }
 
-    private void replaceBookingServiceAddOns(
+    public Optional<String> findAddOnService(String tenantId, String addOnId) {
+        return jdbc.sql("select service_id from booking_service_add_ons where tenant_id = :tenant and add_on_id = :id")
+                .param("tenant", tenantId).param("id", addOnId).query(String.class).optional();
+    }
+
+    public void lockBookingService(String tenantId, String serviceId) {
+        jdbc.sql("select id from booking_services where tenant_id = :tenant and id = :id for update")
+                .param("tenant", tenantId).param("id", serviceId).query(String.class).optional();
+    }
+
+    public void replaceBookingServiceAddOns(
             String tenantId, String serviceId, List<String> addOnIds, Instant now) {
         jdbc.sql("""
                         delete from booking_service_add_ons

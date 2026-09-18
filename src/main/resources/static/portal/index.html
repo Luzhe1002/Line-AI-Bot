@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css?v=20260911-catalog">
+  <link rel="stylesheet" href="/portal/styles.css?v=20260911-owned-addons">
   <script src="/shared/ui-utils.js?v=20260731-3" defer></script>
-  <script src="/portal/app.js?v=20260911-catalog" defer></script>
+  <script src="/portal/app.js?v=20260911-owned-addons" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -353,12 +353,10 @@
           <div>
             <p class="eyebrow">BOOKING CATALOG</p>
             <h2>預約服務與加購</h2>
-            <p class="muted">先查看現有項目，或新增主服務。加購需套用至主服務，顧客才能選擇。</p>
+            <p class="muted">先建立主服務，再在服務底下新增加購。每個加購的價格與時間獨立設定。</p>
           </div>
         </div>
-        <div class="catalog-toolbar" role="group" aria-label="項目分類">
-          <button class="secondary" data-catalog="services" aria-pressed="true" type="button">主服務</button>
-          <button class="secondary" data-catalog="addons" aria-pressed="false" type="button">加購項目</button>
+        <div class="catalog-toolbar">
           <button class="primary" id="catalog-create" type="button">新增主服務</button>
         </div>
         <div id="catalog-feedback" class="panel hidden" role="status" tabindex="-1"></div>
@@ -366,10 +364,6 @@
           <section class="panel" id="service-catalog-panel">
             <h3>主服務</h3>
             <div id="booking-service-list" class="catalog-list"></div>
-          </section>
-          <section class="panel hidden" id="addon-catalog-panel">
-            <h3>加購項目</h3>
-            <div id="booking-add-on-list" class="catalog-list"></div>
           </section>
         </div>
         <div class="booking-catalog-grid">
@@ -392,10 +386,6 @@
               <label>基本時間（分鐘）<input name="duration_minutes" type="number" min="1" max="1440" required></label>
               <label>基本價格（NT$）<input name="price_amount" type="number" min="0" required value="0"></label>
             </div>
-            <fieldset class="option-fieldset">
-              <legend>可提供的加購</legend>
-              <div id="service-add-on-options" class="option-checks"></div>
-            </fieldset>
             <button class="primary" type="submit">新增主服務</button>
             <button class="secondary" data-close-catalog type="button">取消新增</button>
           </form>
