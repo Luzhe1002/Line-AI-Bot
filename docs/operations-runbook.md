@@ -36,8 +36,15 @@ FAILED event。不要關閉簽章驗證。修復後只重放仍可安全處理�
 
 ### OpenAI 故障或成本異常
 
-停止高成本 Reindex／Preview，保留已發布資料集。必要時切換 Local Provider 只作保守
-擷取式回答；切換 Embedding Provider／模型／維度後，必須重建索引才能發布。
+先設定 `APP_AI_ENABLED=false` 並重新部署，使新問答與索引在 Provider 呼叫前被拒絕；
+已發布資料集與預約功能不受影響。查詢 `ai_usage_events` 的 `source`、`status`、
+`rejection_reason`、`total_tokens` 與 `provider_request_ids`，確認受影響租戶及時間範圍。
+停止高成本 Reindex／Preview，必要時切換 Local Provider 只作保守擷取式回答；切換
+Embedding Provider／模型／維度後，必須重建索引才能發布。
+
+解除熔斷前確認 OpenAI 錯誤率與帳務正常，依實際容量調整 `APP_AI_*_LIMIT`，再將
+`APP_AI_ENABLED=true`。不要刪除 `ai_usage_events` 來恢復額度；需要人工調整時應保留
+事故紀錄並透過受稽核的 Migration 或操作程序處理。
 
 ### 重複預約或時段錯誤
 

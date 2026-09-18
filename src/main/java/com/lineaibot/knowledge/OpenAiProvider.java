@@ -56,9 +56,10 @@ public class OpenAiProvider implements AiProvider {
     }
 
     @Override
-    public List<double[]> embedTexts(List<String> texts) {
+    public EmbeddingResult embedTexts(List<String> texts) {
         if (texts.isEmpty()) {
-            return List.of();
+            return new EmbeddingResult(
+                    List.of(), name(), embeddingModel(), null, TokenUsage.none());
         }
         Map<String, Object> body = Map.of(
                 "model", embeddingModel(),
@@ -66,13 +67,14 @@ public class OpenAiProvider implements AiProvider {
                 "dimensions", embeddingDimensions(),
                 "encoding_format", "float");
         try {
-            JsonNode response = client.post()
+            var entity = client.post()
                     .uri("/embeddings")
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("Authorization", "Bearer " + apiKey())
                     .body(body)
                     .retrieve()
-                    .body(JsonNode.class);
+                    .toEntity(JsonNode.class);
+            JsonNode response = entity.getBody();
             if (response == null || !response.path("data").isArray()) {
                 throw new IllegalStateException(
                         "OpenAI returned an invalid embedding response");
@@ -95,7 +97,13 @@ public class OpenAiProvider implements AiProvider {
                 throw new IllegalStateException(
                         "OpenAI returned an unexpected number of embeddings");
             }
-            return ordered.stream().map(IndexedEmbedding::embedding).toList();
+            long estimatedInput = texts.stream().mapToLong(OpenAiProvider::estimateTokens).sum();
+            return new EmbeddingResult(
+                    ordered.stream().map(IndexedEmbedding::embedding).toList(),
+                    name(),
+                    embeddingModel(),
+                    entity.getHeaders().getFirst("x-request-id"),
+                    embeddingUsage(response, estimatedInput));
         } catch (RestClientException exception) {
             throw new IllegalStateException("OpenAI embedding request failed", exception);
         }
@@ -155,7 +163,11 @@ public class OpenAiProvider implements AiProvider {
                     answer,
                     name(),
                     generationModel(),
-                    entity.getHeaders().getFirst("x-request-id"));
+                    entity.getHeaders().getFirst("x-request-id"),
+                    responseUsage(
+                            response,
+                            estimateTokens(instructions) + estimateTokens(prompt),
+                            estimateTokens(answer)));
         } catch (RestClientException exception) {
             throw new IllegalStateException(
                     "OpenAI answer-generation request failed", exception);
@@ -179,6 +191,46 @@ public class OpenAiProvider implements AiProvider {
             }
         }
         return result.toString().strip();
+    }
+
+    static TokenUsage embeddingUsage(JsonNode response, long estimatedInput) {
+        JsonNode usage = response == null ? null : response.path("usage");
+        if (usage == null || usage.isMissingNode()) {
+            return new TokenUsage(estimatedInput, 0, 0, 0, estimatedInput);
+        }
+        long input = nonNegative(usage.path("prompt_tokens").asLong(
+                usage.path("input_tokens").asLong(estimatedInput)));
+        long total = nonNegative(usage.path("total_tokens").asLong(input));
+        return new TokenUsage(input, 0, 0, 0, total);
+    }
+
+    static TokenUsage responseUsage(
+            JsonNode response, long estimatedInput, long estimatedOutput) {
+        JsonNode usage = response == null ? null : response.path("usage");
+        if (usage == null || usage.isMissingNode()) {
+            return new TokenUsage(
+                    estimatedInput,
+                    0,
+                    estimatedOutput,
+                    0,
+                    estimatedInput + estimatedOutput);
+        }
+        long input = nonNegative(usage.path("input_tokens").asLong(estimatedInput));
+        long cached = nonNegative(
+                usage.path("input_tokens_details").path("cached_tokens").asLong(0));
+        long output = nonNegative(usage.path("output_tokens").asLong(estimatedOutput));
+        long reasoning = nonNegative(
+                usage.path("output_tokens_details").path("reasoning_tokens").asLong(0));
+        long total = nonNegative(usage.path("total_tokens").asLong(input + output));
+        return new TokenUsage(input, cached, output, reasoning, total);
+    }
+
+    private static long estimateTokens(String value) {
+        return Math.max(1, (long) Math.ceil(value.length() / 4.0));
+    }
+
+    private static long nonNegative(long value) {
+        return Math.max(0, value);
     }
 
     static String answerInstructions() {

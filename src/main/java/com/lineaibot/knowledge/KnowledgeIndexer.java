@@ -1,6 +1,7 @@
 package com.lineaibot.knowledge;
 
 import com.lineaibot.config.AppProperties;
+import com.lineaibot.knowledge.AiProvider.EmbeddingResult;
 import com.lineaibot.knowledge.KnowledgeRepository.DocumentRow;
 import com.lineaibot.shared.ApiException;
 import java.nio.charset.StandardCharsets;
@@ -25,6 +26,7 @@ public class KnowledgeIndexer {
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
     private final TransactionTemplate transactions;
+    private final AiUsageService aiUsage;
 
     public KnowledgeIndexer(
             KnowledgeRepository repository,
@@ -32,19 +34,22 @@ public class KnowledgeIndexer {
             DocumentChunker chunker,
             AppProperties properties,
             ObjectMapper objectMapper,
-            TransactionTemplate transactions) {
+            TransactionTemplate transactions,
+            AiUsageService aiUsage) {
         this.repository = repository;
         this.providers = providers;
         this.chunker = chunker;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.transactions = transactions;
+        this.aiUsage = aiUsage;
     }
 
     public DocumentRow indexDocument(String documentId) {
         DocumentRow document = repository.findDocument(documentId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Document not found"));
         repository.markDocumentIndexing(documentId);
+        AiUsageService.Lease lease = null;
         try {
             var provider = providers.current();
             List<String> chunks = chunker.split(
@@ -57,7 +62,24 @@ public class KnowledgeIndexer {
             List<String> embeddingInputs = chunks.stream()
                     .map(chunk -> "標題：" + document.title() + "\n內容：" + chunk)
                     .toList();
-            List<double[]> embeddings = provider.embedTexts(embeddingInputs);
+            lease = aiUsage.acquire(
+                    document.tenantId(),
+                    "indexer",
+                    "INDEXING",
+                    document.title().length() + document.content().length(),
+                    false);
+            if (!lease.allowed()) {
+                repository.markDocumentFailed(documentId, lease.userMessage());
+                throw new ApiException(HttpStatus.TOO_MANY_REQUESTS, lease.userMessage());
+            }
+            EmbeddingResult embeddingResult = provider.embedTexts(embeddingInputs);
+            List<double[]> embeddings = embeddingResult.embeddings();
+            aiUsage.succeed(
+                    lease,
+                    embeddingResult.usage(),
+                    embeddingResult.provider(),
+                    embeddingResult.model(),
+                    embeddingResult.requestId());
             if (embeddings.size() != chunks.size()) {
                 throw new IllegalStateException("Embedding count does not match chunk count");
             }
@@ -87,7 +109,15 @@ public class KnowledgeIndexer {
                         document.id(), hash(document.title() + "\0" + document.content()), now);
             });
             return repository.findDocument(documentId).orElseThrow();
+        } catch (ApiException exception) {
+            if (lease != null && lease.allowed()) {
+                aiUsage.fail(lease, exception);
+            }
+            throw exception;
         } catch (RuntimeException exception) {
+            if (lease != null) {
+                aiUsage.fail(lease, exception);
+            }
             String message = exception.getMessage() == null
                     ? exception.getClass().getSimpleName()
                     : exception.getMessage();

@@ -4,6 +4,30 @@ import java.util.List;
 
 public interface AiProvider {
 
+    record TokenUsage(
+            long inputTokens,
+            long cachedInputTokens,
+            long outputTokens,
+            long reasoningTokens,
+            long totalTokens) {
+
+        public static TokenUsage none() {
+            return new TokenUsage(0, 0, 0, 0, 0);
+        }
+
+        public TokenUsage plus(TokenUsage other) {
+            if (other == null) {
+                return this;
+            }
+            return new TokenUsage(
+                    inputTokens + other.inputTokens,
+                    cachedInputTokens + other.cachedInputTokens,
+                    outputTokens + other.outputTokens,
+                    reasoningTokens + other.reasoningTokens,
+                    totalTokens + other.totalTokens);
+        }
+    }
+
     record GroundingContext(
             String chunkId,
             String documentId,
@@ -12,7 +36,19 @@ public interface AiProvider {
             String sourceUrl,
             double score) {}
 
-    record GeneratedText(String text, String provider, String model, String requestId) {}
+    record EmbeddingResult(
+            List<double[]> embeddings,
+            String provider,
+            String model,
+            String requestId,
+            TokenUsage usage) {}
+
+    record GeneratedText(
+            String text,
+            String provider,
+            String model,
+            String requestId,
+            TokenUsage usage) {}
 
     String name();
 
@@ -22,7 +58,7 @@ public interface AiProvider {
 
     String generationModel();
 
-    List<double[]> embedTexts(List<String> texts);
+    EmbeddingResult embedTexts(List<String> texts);
 
     GeneratedText generateAnswer(
             String question,

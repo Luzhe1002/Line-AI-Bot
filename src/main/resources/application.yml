@@ -68,5 +68,13 @@ app:
     chunk-overlap-chars: ${APP_AI_CHUNK_OVERLAP_CHARS:150}
     max-output-tokens: ${APP_AI_MAX_OUTPUT_TOKENS:500}
     timeout-seconds: ${APP_AI_TIMEOUT_SECONDS:20}
+    enabled: ${APP_AI_ENABLED:true}
+    user-requests-per-minute: ${APP_AI_USER_REQUESTS_PER_MINUTE:5}
+    user-requests-per-day: ${APP_AI_USER_REQUESTS_PER_DAY:50}
+    tenant-requests-per-day: ${APP_AI_TENANT_REQUESTS_PER_DAY:1000}
+    tenant-daily-token-limit: ${APP_AI_TENANT_DAILY_TOKEN_LIMIT:500000}
+    global-daily-token-limit: ${APP_AI_GLOBAL_DAILY_TOKEN_LIMIT:5000000}
+    max-concurrent-requests-per-tenant: ${APP_AI_MAX_CONCURRENT_REQUESTS_PER_TENANT:8}
+    pending-lease-seconds: ${APP_AI_PENDING_LEASE_SECONDS:120}
     openai-api-key: ${OPENAI_API_KEY:}
     openai-base-url: ${APP_OPENAI_BASE_URL:https://api.openai.com/v1}

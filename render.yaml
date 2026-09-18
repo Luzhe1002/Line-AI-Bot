@@ -26,6 +26,8 @@ services:
         value: "false"
       - key: APP_AI_PROVIDER
         value: openai
+      - key: APP_AI_ENABLED
+        value: "true"
       - key: OPENAI_API_KEY
         sync: false
       - key: APP_LINE_API_ENABLED

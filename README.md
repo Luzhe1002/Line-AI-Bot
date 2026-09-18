@@ -288,6 +288,18 @@ APP_AI_EMBEDDING_MODEL=text-embedding-3-small
 APP_AI_EMBEDDING_DIMENSIONS=512
 ```
 
+AI 呼叫預設啟用資料庫式用量管控：同一 LINE 使用者每分鐘 5 次、每日 50 次，
+每租戶每日 1,000 次／500,000 tokens，全平台每日 5,000,000 tokens，且單租戶
+最多 8 個進行中請求。可由 `.env` 的 `APP_AI_USER_REQUESTS_PER_MINUTE`、
+`APP_AI_USER_REQUESTS_PER_DAY`、`APP_AI_TENANT_REQUESTS_PER_DAY`、
+`APP_AI_TENANT_DAILY_TOKEN_LIMIT`、`APP_AI_GLOBAL_DAILY_TOKEN_LIMIT` 與
+`APP_AI_MAX_CONCURRENT_REQUESTS_PER_TENANT` 調整。事故時設定
+`APP_AI_ENABLED=false` 可全域停止新 AI 呼叫；超限時直接回覆固定訊息，不會呼叫 Provider。
+
+每次問答與文件索引都會寫入 `ai_usage_events`，保存租戶、HMAC 使用者識別、來源、
+狀態、模型、Provider request ID，以及 input／cached／output／reasoning／total tokens。
+失敗或逾時租約會保守以預留 tokens 計入當日額度，避免用失敗重試繞過成本上限。
+
 目前 Render 測試環境已使用 OpenAI Provider；`OPENAI_API_KEY` 只存於
 Render Secret，`render.yaml` 僅以 `sync: false` 宣告變數名稱。
 

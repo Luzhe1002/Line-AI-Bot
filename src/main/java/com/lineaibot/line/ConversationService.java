@@ -146,7 +146,7 @@ public class ConversationService {
 
     private List<Map<String, Object>> knowledgeAnswer(
             TenantRow tenant, String lineUserId, String question) {
-        var answer = knowledge.answer(tenant, question, lineUserId);
+        var answer = knowledge.answerFromLine(tenant, question, lineUserId);
         Map<String, Object> message = new LinkedHashMap<>();
         message.put("type", "text");
         message.put("text", truncate(answer.answer(), 5000));
