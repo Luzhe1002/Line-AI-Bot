@@ -55,6 +55,11 @@ app:
   line-api-base-url: ${APP_LINE_API_BASE_URL:https://api.line.me}
   line-api-data-base-url: ${APP_LINE_API_DATA_BASE_URL:https://api-data.line.me}
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8000}
+  conversation:
+    enabled: ${APP_CONVERSATION_ENABLED:true}
+    idle-minutes: ${APP_CONVERSATION_IDLE_MINUTES:30}
+    max-turns: ${APP_CONVERSATION_MAX_TURNS:5}
+    max-chars: ${APP_CONVERSATION_MAX_CHARS:6000}
   ai:
     provider: ${APP_AI_PROVIDER:local}
     generation-model: ${APP_AI_GENERATION_MODEL:gpt-5.6-luna}

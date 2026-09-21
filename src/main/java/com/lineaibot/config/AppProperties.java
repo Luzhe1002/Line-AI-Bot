@@ -32,6 +32,28 @@ public class AppProperties {
     private String lineApiDataBaseUrl = "https://api-data.line.me";
     private String publicBaseUrl = "http://localhost:8000";
     private final Ai ai = new Ai();
+    @jakarta.validation.Valid
+    private final Conversation conversation = new Conversation();
+
+    public Conversation getConversation() { return conversation; }
+
+    public static class Conversation {
+        private boolean enabled = true;
+        @Min(1) @Max(120)
+        private int idleMinutes = 30;
+        @Min(1) @Max(20)
+        private int maxTurns = 5;
+        @Min(1000) @Max(20000)
+        private int maxChars = 6000;
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean value) { enabled = value; }
+        public int getIdleMinutes() { return idleMinutes; }
+        public void setIdleMinutes(int value) { idleMinutes = value; }
+        public int getMaxTurns() { return maxTurns; }
+        public void setMaxTurns(int value) { maxTurns = value; }
+        public int getMaxChars() { return maxChars; }
+        public void setMaxChars(int value) { maxChars = value; }
+    }
 
     @PostConstruct
     void validateProductionSecrets() {
