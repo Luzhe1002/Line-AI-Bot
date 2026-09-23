@@ -134,7 +134,6 @@ function showAuth() {
 
 async function enterApp() {
   $("#portal-reservations").replaceChildren();
-  $("#portal-handoffs").replaceChildren();
   $("#auth-view").classList.add("hidden");
   $("#app-view").classList.remove("hidden");
   $("#merchant-mini").innerHTML = `<strong>${escapeHtml(state.tenant.name)}</strong><br><small>${escapeHtml(state.tenant.slug)}</small>`;
@@ -347,8 +346,6 @@ function renderFeatures() {
   const enabled = bookingEnabled();
   $("#features-form").elements.booking_enabled.checked = enabled;
   $$("[data-booking-only]").forEach((el) => el.classList.toggle("hidden", !enabled));
-  $("#merchant-mode").textContent = enabled ? "客服＋預約" : "純客服";
-  $("#handoff-count").textContent = state.overview.open_handoff_count || 0;
   $("#reservation-panel").classList.toggle("hidden", !enabled && !state.overview.has_reservations);
   $("#reservation-panel-title").textContent = enabled ? "預約管理" : "既有預約管理";
   $("#reservation-mode-copy").textContent = enabled ? "查看預約與處理取消。時段封鎖請從 LINE 開啟預約月曆。" : "已停止接受新預約；仍可查看與取消既有預約。";
@@ -705,32 +702,6 @@ $("#features-form").addEventListener("submit", async (event) => {
     toast("功能已儲存，LINE 選單將在背景同步");
   } catch (error) { toast(error.message, true); }
   finally { setSubmitting(form, false); }
-});
-
-async function loadHandoffs() {
-  const tenantId = state.tenant.id;
-  const items = await api("/handoffs");
-  if (state.tenant?.id !== tenantId) return;
-  $("#portal-handoffs").innerHTML = items.length ? items.map((item) => `
-    <article class="reservation-row"><div><strong>${escapeHtml(item.reason)}</strong>
-    <p>案件編號：${escapeHtml(item.id)}</p>
-    <small>${escapeHtml(new Date(item.created_at).toLocaleString("zh-TW", { timeZone: state.tenant.timezone }))}</small></div>
-    <button class="secondary" data-close-handoff="${escapeHtml(item.id)}" type="button">標記已處理</button></article>`).join("") : "<p>目前沒有待處理案件。</p>";
-}
-$("#load-handoffs").addEventListener("click", async (event) => {
-  event.target.disabled = true;
-  try { await loadHandoffs(); } catch (error) { toast(error.message, true); }
-  finally { event.target.disabled = false; }
-});
-$("#portal-handoffs").addEventListener("click", async (event) => {
-  const button = event.target.closest("[data-close-handoff]");
-  if (!button) return;
-  button.disabled = true;
-  try {
-    await api(`/handoffs/${encodeURIComponent(button.dataset.closeHandoff)}/close`, { method: "POST" });
-    await Promise.all([loadHandoffs(), refreshOverview()]);
-    toast("案件已標記處理完成");
-  } catch (error) { toast(error.message, true); button.disabled = false; }
 });
 
 async function loadPortalReservations() {
