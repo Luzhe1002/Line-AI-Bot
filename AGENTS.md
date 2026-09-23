@@ -11,3 +11,9 @@
 - 推送前確認目標遠端與分支名稱；推送後核對遠端提交與本機提交一致。
 - 整理已推送的分支優先以 revert 保留歷史。改寫共享歷史前須有明確授權，並使用帶預期提交的 force-with-lease。
 - 回報實際分支、提交及驗證結果；未合併或未部署不得描述為已上線。
+
+# 正式發布規則
+
+- 本專案發布、部署、回復與分支管理使用 `.agents/skills/line-ai-release/SKILL.md`，並讀取 `docs/production-release.md`。
+- 功能 PR 進 main；正式發布只由 main PR 進 production，以 merge commit 合併。production 禁止直接推送、force push 或刪除。
+- 正式 Render 使用 production 且 CI 通過後部署；切換前必須核對實際部署 commit 與 Flyway 歷史。render.yaml 修改不等於服務已切換。

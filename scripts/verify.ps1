@@ -26,6 +26,9 @@ try {
     if ($null -eq $npm) {
         throw "npm is required for frontend verification."
     }
+    & node --test tests/release-policy.test.cjs
+    if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
     & npm run test:ui:logic
     if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 

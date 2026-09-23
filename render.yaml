@@ -4,11 +4,11 @@ services:
     runtime: docker
     plan: free
     region: singapore
-    branch: main
+    branch: production
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    autoDeployTrigger: commit
+    autoDeployTrigger: checksPass
     envVars:
       - key: DATABASE_URL
         fromDatabase:
