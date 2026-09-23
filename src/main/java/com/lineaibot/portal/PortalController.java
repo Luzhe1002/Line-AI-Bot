@@ -72,6 +72,8 @@ public class PortalController {
     private final KnowledgeService knowledge;
     private final MerchantStaffService merchantStaff;
     private final MerchantManageTokenService manageTokens;
+    private final com.lineaibot.booking.BookingManager bookings;
+    private final com.lineaibot.line.LineRepository conversations;
 
     public PortalController(
             ApiAuthService apiAuth,
@@ -79,13 +81,16 @@ public class PortalController {
             TenantRepository tenantRepository,
             KnowledgeService knowledge,
             MerchantStaffService merchantStaff,
-            MerchantManageTokenService manageTokens) {
+            MerchantManageTokenService manageTokens, com.lineaibot.booking.BookingManager bookings,
+            com.lineaibot.line.LineRepository conversations) {
         this.apiAuth = apiAuth;
         this.tenants = tenants;
         this.tenantRepository = tenantRepository;
         this.knowledge = knowledge;
         this.merchantStaff = merchantStaff;
         this.manageTokens = manageTokens;
+        this.bookings = bookings;
+        this.conversations = conversations;
     }
 
     public record LoginRequest(@NotBlank String tenantId, @NotBlank String apiKey) {}
@@ -106,7 +111,8 @@ public class PortalController {
             List<BusinessHourRead> businessHours,
             List<BookingServiceRead> bookingServices,
             List<BookingAddOnRead> bookingAddOns,
-            List<DatasetRead> datasets) {}
+            List<DatasetRead> datasets,
+            boolean hasReservations, long openHandoffCount) {}
 
     @PostMapping("/session")
     SessionView login(@Valid @RequestBody LoginRequest request, HttpServletRequest httpRequest) {
@@ -177,7 +183,45 @@ public class PortalController {
                 tenants.listBusinessHours(tenant),
                 tenants.listBookingServices(tenant),
                 tenants.listBookingAddOns(tenant),
-                knowledge.listDatasets(tenant));
+                knowledge.listDatasets(tenant),
+                tenantRepository.hasReservations(tenant.id()), tenantRepository.openHandoffCount(tenant.id()));
+    }
+
+    @GetMapping("/handoffs")
+    List<com.lineaibot.line.LineRepository.HandoffRead> handoffs(HttpSession session) {
+        return conversations.listOpenHandoffs(requireTenant(session).id());
+    }
+
+    @PostMapping("/handoffs/{ticketId}/close")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    void closeHandoff(@PathVariable String ticketId,
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken, HttpSession session) {
+        requireCsrf(session, csrfToken);
+        if (!conversations.closeHandoff(requireTenant(session).id(), ticketId)) {
+            throw new ApiException(HttpStatus.NOT_FOUND, "客服案件不存在或已結案");
+        }
+    }
+
+    @GetMapping("/reservations")
+    List<com.lineaibot.booking.BookingDtos.ReservationRead> reservations(HttpSession session) {
+        return bookings.listReservations(requireTenant(session).id());
+    }
+
+    @PostMapping("/reservations/{reservationId}/cancel")
+    com.lineaibot.booking.BookingDtos.ReservationRead cancelReservation(
+            @PathVariable String reservationId,
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken, HttpSession session) {
+        requireCsrf(session, csrfToken);
+        return bookings.cancelReservation(requireTenant(session).id(), reservationId, null);
+    }
+
+    @PutMapping("/features")
+    TenantRead saveFeatures(
+            @RequestHeader(name = "X-CSRF-Token", required = false) String csrfToken,
+            HttpSession session,
+            @Valid @RequestBody com.lineaibot.tenant.TenantDtos.FeaturesUpdate request) {
+        requireCsrf(session, csrfToken);
+        return tenants.updateFeatures(requireTenant(session), request);
     }
 
     @PutMapping("/line-channel")

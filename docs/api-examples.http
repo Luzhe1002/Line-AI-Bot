@@ -20,7 +20,8 @@ X-Platform-Admin-Key: {{platformKey}}
   "name": "示範商家",
   "slug": "demo-merchant",
   "timezone": "Asia/Taipei",
-  "slot_minutes": 60
+  "slot_minutes": 60,
+  "booking_enabled": true
 }
 
 ### Configure LINE channel
@@ -164,3 +165,18 @@ X-Tenant-Api-Key: {{tenantKey}}
   "question": "請問你們的營業時間？",
   "line_user_id": "U-example-user"
 }
+
+### Switch merchant to support-only mode; existing reservations remain manageable
+PUT {{baseUrl}}/api/v1/tenants/{{tenantId}}/features
+Content-Type: application/json
+X-Tenant-Api-Key: {{tenantKey}}
+
+{"booking_enabled": false}
+
+### Portal equivalent (authenticated owner session and current CSRF token required)
+# PUT /portal/api/features {"booking_enabled": false}
+# GET /portal/api/handoffs
+# POST /portal/api/handoffs/{ticketId}/close
+# GET /portal/api/reservations
+# POST /portal/api/reservations/{reservationId}/cancel
+# State-changing requests require X-CSRF-Token; tenant identity comes from the session.

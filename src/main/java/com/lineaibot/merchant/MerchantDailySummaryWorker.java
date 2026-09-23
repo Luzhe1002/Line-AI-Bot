@@ -94,6 +94,7 @@ public class MerchantDailySummaryWorker {
         var reservations = agenda.reservations().stream()
                 .filter(item -> "CONFIRMED".equals(item.status()))
                 .toList();
+        if (!tenant.bookingEnabled() && reservations.isEmpty()) return;
         StringBuilder text = new StringBuilder("今日預約摘要：")
                 .append(reservations.size())
                 .append(" 筆");

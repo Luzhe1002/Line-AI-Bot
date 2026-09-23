@@ -75,7 +75,8 @@ public class TenantService {
                 slotMinutes,
                 crypto.hashApiKey(apiKey),
                 true,
-                now);
+                now,
+                Boolean.TRUE.equals(request.bookingEnabled()));
         try {
             repository.insertTenant(row);
             for (int weekday = 0; weekday < 5; weekday++) {
@@ -86,8 +87,9 @@ public class TenantService {
                         LocalTime.of(9, 0),
                         LocalTime.of(18, 0));
             }
-            repository.insertDefaultBookingService(
-                    UUID.randomUUID().toString(), row.id(), now);
+            if (row.bookingEnabled()) {
+                repository.insertDefaultBookingService(UUID.randomUUID().toString(), row.id(), now);
+            }
             repository.insertDefaultDataset(UUID.randomUUID().toString(), row.id(), now);
         } catch (DataIntegrityViolationException exception) {
             throw new ApiException(HttpStatus.CONFLICT, "Tenant slug already exists");
@@ -100,7 +102,17 @@ public class TenantService {
                 row.slotMinutes(),
                 row.active(),
                 row.createdAt(),
-                apiKey);
+                apiKey, row.bookingEnabled());
+    }
+
+    @Transactional
+    public TenantDtos.TenantRead updateFeatures(TenantRow tenant, TenantDtos.FeaturesUpdate request) {
+        repository.setBookingEnabled(tenant.id(), request.bookingEnabled());
+        if (request.bookingEnabled() && repository.findBookingServices(tenant.id()).isEmpty()) {
+            repository.insertDefaultBookingService(UUID.randomUUID().toString(), tenant.id(), Instant.now());
+        }
+        richMenus.scheduleTenant(tenant.id());
+        return repository.findById(tenant.id()).orElseThrow().toRead();
     }
 
     @Transactional

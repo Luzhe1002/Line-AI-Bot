@@ -61,8 +61,43 @@ class ConversationUnderstandingTest {
         var providers = mock(AiProviderRegistry.class);
         var provider = mock(AiProvider.class);
         when(providers.current()).thenReturn(provider);
-        when(provider.understandConversation(anyString(), any(), anyString())).thenThrow(new IllegalStateException("timeout"));
-        var service = new ConversationUnderstandingService(providers, new IntentClassifier(), new CryptoService(), new AppProperties());
+        when(provider.understandConversationWithUsage(anyString(), any(), anyString())).thenThrow(new IllegalStateException("timeout"));
+        var usage = mock(com.lineaibot.knowledge.AiUsageService.class);
+        when(usage.acquire(anyString(), anyString(), anyString(), anyLong(), eq(true)))
+                .thenReturn(new com.lineaibot.knowledge.AiUsageService.Lease("lease", true, null, null));
+        var service = new ConversationUnderstandingService(providers, new IntentClassifier(), new CryptoService(), new AppProperties(), usage);
         assertThat(service.understand("tenant", "user", "那要多久？", ConversationContext.History.empty()).needsClarification()).isTrue();
+    }
+    @Test
+    void deniedBudgetNeverCallsHostedUnderstanding() {
+        var providers = mock(AiProviderRegistry.class);
+        var provider = mock(AiProvider.class);
+        when(providers.current()).thenReturn(provider);
+        when(provider.name()).thenReturn("openai");
+        var usage = mock(com.lineaibot.knowledge.AiUsageService.class);
+        when(usage.acquire(anyString(), anyString(), anyString(), anyLong(), eq(true)))
+                .thenReturn(new com.lineaibot.knowledge.AiUsageService.Lease(null, false, "LIMIT", "limit"));
+        var service = new ConversationUnderstandingService(providers, new IntentClassifier(), new CryptoService(), new AppProperties(), usage);
+        assertThat(service.understand("tenant", "user", "那要多久？", ConversationContext.History.empty()).needsClarification()).isTrue();
+        verify(provider, never()).understandConversationWithUsage(anyString(), any(), anyString());
+        verify(usage, never()).succeed(any(), any(), any(), any(), any());
+    }
+
+    @Test
+    void successfulUnderstandingRecordsProviderTokenUsage() {
+        var providers = mock(AiProviderRegistry.class);
+        var provider = mock(AiProvider.class);
+        when(providers.current()).thenReturn(provider);
+        when(provider.name()).thenReturn("openai");
+        var usage = mock(com.lineaibot.knowledge.AiUsageService.class);
+        var lease = new com.lineaibot.knowledge.AiUsageService.Lease("lease", true, null, null);
+        when(usage.acquire(anyString(), anyString(), anyString(), anyLong(), eq(true))).thenReturn(lease);
+        var understood = new ConversationContext.Understanding("KNOWLEDGE", "按摩要多久？", "按摩", false, "");
+        var tokens = new AiProvider.TokenUsage(100, 20, 30, 0, 130);
+        when(provider.understandConversationWithUsage(anyString(), any(), anyString()))
+                .thenReturn(new AiProvider.ConversationUnderstandingResult(understood, tokens, "openai", "model", "request"));
+        var service = new ConversationUnderstandingService(providers, new IntentClassifier(), new CryptoService(), new AppProperties(), usage);
+        assertThat(service.understand("tenant", "user", "那要多久？", ConversationContext.History.empty())).isEqualTo(understood);
+        verify(usage).succeed(lease, tokens, "openai", "model", "request");
     }
 }

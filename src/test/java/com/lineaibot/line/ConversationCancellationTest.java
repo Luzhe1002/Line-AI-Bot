@@ -13,9 +13,9 @@ import org.junit.jupiter.api.Test;
 class ConversationCancellationTest {
     private final BookingManager bookings = mock(BookingManager.class);
     private final ConversationService service = new ConversationService(bookings, null, null, null, null, null, null, null);
-    private final TenantRow tenant = new TenantRow("tenant", "test", "Test", "Asia/Taipei", 60, "hash", true, Instant.now());
-    private final ReservationRead reservation = new ReservationRead("r1", "tenant", "service", "user", "客人",
-            Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), "CONFIRMED", "key", Instant.now(), null);
+    private final TenantRow tenant = new TenantRow("tenant", "test", "Test", "Asia/Taipei", 60, "hash", true, Instant.now(), true);
+    private final ReservationRead reservation = new ReservationRead("r1", "tenant", "service", "一般預約", List.of(), "user", "客人",
+            Instant.now().plusSeconds(3600), Instant.now().plusSeconds(7200), 60, 0, "CONFIRMED", "key", Instant.now(), null);
 
     @Test
     void selectionRequiresExplicitMatchingConfirmation() {

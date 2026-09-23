@@ -186,6 +186,7 @@
 
   async function loadBlockSlots() {
     const date = $("#block-date").value;
+    if (state.bootstrap.booking_enabled === false) return;
     const service = state.bootstrap.services[0];
     const select = $("#block-slot");
     if (!date || !service) {
@@ -219,6 +220,10 @@
     await establishSession();
     state.bootstrap = await api("/bootstrap");
     $("#tenant-name").textContent = state.bootstrap.tenant_name;
+    if (state.bootstrap.booking_enabled === false) {
+      $("#block-form").classList.add("hidden");
+      toast("目前已停止接受新預約，仍可查看與取消既有預約。");
+    }
     $("#staff-name").textContent = `${state.bootstrap.staff.display_name} · 店家預約管理`;
     $("#role-badge").textContent = UiUtils.roleLabel(state.bootstrap.staff.role);
     document.title = `${state.bootstrap.tenant_name}｜預約管理`;

@@ -19,7 +19,10 @@ public final class TenantDtos {
                     @Pattern(regexp = "^[a-z0-9][a-z0-9-]{2,79}$")
                     String slug,
             String timezone,
-            Integer slotMinutes) {}
+            Integer slotMinutes,
+            Boolean bookingEnabled) {}
+
+    public record FeaturesUpdate(@jakarta.validation.constraints.NotNull Boolean bookingEnabled) {}
 
     public record TenantRead(
             String id,
@@ -28,7 +31,8 @@ public final class TenantDtos {
             String timezone,
             int slotMinutes,
             boolean active,
-            Instant createdAt) {}
+            Instant createdAt,
+            boolean bookingEnabled) {}
 
     public record TenantCreated(
             String id,
@@ -38,7 +42,8 @@ public final class TenantDtos {
             int slotMinutes,
             boolean active,
             Instant createdAt,
-            String adminApiKey) {}
+            String adminApiKey,
+            boolean bookingEnabled) {}
 
     public record LineChannelUpsert(
             @NotBlank @Size(min = 8) String channelSecret,

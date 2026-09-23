@@ -344,3 +344,9 @@ button:focus-visible, a:focus-visible { outline: 3px solid var(--lime); outline-
     animation-iteration-count: 1 !important;
   }
 }
+
+.feature-choice { display: flex; align-items: center; gap: 12px; min-height: 44px; cursor: pointer; }
+.feature-choice input { width: 20px; height: 20px; flex: 0 0 20px; }
+.reservation-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 16px 0; border-bottom: 1px solid var(--line, #ddd); }
+.reservation-row p { overflow-wrap: anywhere; }
+@media (max-width: 540px) { .reservation-row { align-items: flex-start; flex-direction: column; } }

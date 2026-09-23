@@ -50,6 +50,16 @@ public interface AiProvider {
             String requestId,
             TokenUsage usage) {}
 
+    record ConversationUnderstandingResult(
+            com.lineaibot.line.ConversationContext.Understanding understanding,
+            TokenUsage usage, String provider, String model, String requestId) {}
+
+    default ConversationUnderstandingResult understandConversationWithUsage(
+            String text, com.lineaibot.line.ConversationContext.History history, String safetyIdentifier) {
+        return new ConversationUnderstandingResult(understandConversation(text, history, safetyIdentifier),
+                TokenUsage.none(), name(), generationModel(), null);
+    }
+
     String name();
 
     String embeddingModel();
@@ -63,6 +73,11 @@ public interface AiProvider {
     default com.lineaibot.line.ConversationContext.Understanding understandConversation(
             String text, com.lineaibot.line.ConversationContext.History history, String safetyIdentifier) {
         return com.lineaibot.line.LocalConversationUnderstanding.resolve(text, history);
+    }
+
+    default GeneratedText generateAnswer(String question, List<GroundingContext> contexts,
+            String tenantName, String safetyIdentifier, boolean bookingEnabled) {
+        return generateAnswer(question, contexts, tenantName, safetyIdentifier);
     }
 
     GeneratedText generateAnswer(

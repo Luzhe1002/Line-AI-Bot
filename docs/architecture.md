@@ -247,3 +247,14 @@ TXT／Markdown／CSV 匯入、索引、發布及回答測試。檔案大小先�
 
 正式上線前仍需完成受管 Secret Manager 與輪替、登入及高成本端點限流、
 Metrics／Tracing／告警、個資保存期限與刪除流程、備份還原演練，以及檔案惡意內容掃描。
+
+
+## Optional booking capability
+
+`tenants.booking_enabled` is independent of staff roles. V11 preserves `true` for existing rows; application onboarding defaults new merchants to `false`. Enabling an empty catalog creates one default booking service without duplicating prior services. Disabling preserves services, reservations, occupied slots and notification events.
+
+`BookingManager` gates availability and new reservations. `ReservationWriter` locks and rechecks the tenant row inside the insert transaction, preventing a request with stale capability state from creating a reservation after disable completes. Read/cancel APIs remain tenant-scoped and available in both modes. The portal exposes existing reservation management and support ticket closure under owner session authorization and CSRF protection.
+
+AI generation receives the capability separately from retrieved knowledge. OpenAI instructions prohibit new booking guidance when disabled; the local extractive provider excludes old booking instructions. Explicit LINE booking intent returns a support-oriented explanation without issuing a token.
+
+Customer default menus use durable `customer_menu_sync` jobs with revisions, claims, lease expiry and retries. Staff menus retain their existing durable jobs; cache keys distinguish booking and support modes. Configuration changes enqueue both in the configuration transaction. An unavailable LINE channel is deferred until enabled. Worker flags and credentials are still required for real LINE synchronization. Default customer menus are managed by this platform, while linked staff menus retain role-specific privileges.

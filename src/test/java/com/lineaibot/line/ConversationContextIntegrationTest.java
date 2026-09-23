@@ -34,7 +34,7 @@ class ConversationContextIntegrationTest {
     @Autowired JdbcClient jdbc;
 
     private TenantRepository.TenantRow tenant() {
-        var created = tenants.createTenant(new TenantDtos.TenantCreate("Context test", "ctx-" + UUID.randomUUID(), "Asia/Taipei", 60));
+        var created = tenants.createTenant(new TenantDtos.TenantCreate("Context test", "ctx-" + UUID.randomUUID(), "Asia/Taipei", 60, true));
         var row = tenantRepository.findById(created.id()).orElseThrow();
         tenants.configureLineChannel(row, new TenantDtos.LineChannelUpsert("context-test-secret", "context-test-access", true));
         return row;

@@ -308,7 +308,7 @@ public class KnowledgeService {
             String safetyIdentifier = "line_user_"
                     + crypto.stableHmac(properties.getEncryptionKey(), subject).substring(0, 32);
             var generated = provider.generateAnswer(
-                    question, contexts, tenant.name(), safetyIdentifier);
+                    question, contexts, tenant.name(), safetyIdentifier, tenant.bookingEnabled());
             TokenUsage totalUsage = retrieval.embedding().usage().plus(generated.usage());
             aiUsage.succeed(
                     lease,

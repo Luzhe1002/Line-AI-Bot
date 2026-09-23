@@ -115,6 +115,12 @@ public class OpenAiProvider implements AiProvider {
             List<GroundingContext> contexts,
             String tenantName,
             String safetyIdentifier) {
+        return generateAnswer(question, contexts, tenantName, safetyIdentifier, true);
+    }
+
+    @Override
+    public GeneratedText generateAnswer(String question, List<GroundingContext> contexts,
+            String tenantName, String safetyIdentifier, boolean bookingEnabled) {
         if (contexts.isEmpty()) {
             throw new IllegalArgumentException(
                     "Cannot generate a grounded answer without context");
@@ -131,7 +137,8 @@ public class OpenAiProvider implements AiProvider {
                 "merchant", tenantName == null ? "目前商家" : tenantName,
                 "customer_question", question,
                 "retrieved_sources", sources));
-        String instructions = answerInstructions();
+        String instructions = answerInstructions() + (bookingEnabled ? ""
+                : "此店家已停用線上預約。即使知識資料提及預約，也不得引導建立新預約或提供預約連結；請引導聯絡店家。既有預約仍可查詢或取消。");
 
         Map<String, Object> body = new LinkedHashMap<>();
         body.put("model", generationModel());
@@ -177,6 +184,12 @@ public class OpenAiProvider implements AiProvider {
     @Override
     public com.lineaibot.line.ConversationContext.Understanding understandConversation(
             String text, com.lineaibot.line.ConversationContext.History history, String safetyIdentifier) {
+        return understandConversationWithUsage(text, history, safetyIdentifier).understanding();
+    }
+
+    @Override
+    public ConversationUnderstandingResult understandConversationWithUsage(
+            String text, com.lineaibot.line.ConversationContext.History history, String safetyIdentifier) {
         Map<String, Object> stringField = Map.of("type", "string");
         Map<String, Object> schema = Map.of(
                 "type", "object", "additionalProperties", false,
@@ -212,8 +225,9 @@ public class OpenAiProvider implements AiProvider {
         if (!"none".equals(properties.getAi().getReasoningEffort())) {
             body.put("reasoning", Map.of("effort", properties.getAi().getReasoningEffort()));
         }
-        JsonNode response = client.post().uri("/responses").contentType(MediaType.APPLICATION_JSON)
-                .header("Authorization", "Bearer " + apiKey()).body(body).retrieve().body(JsonNode.class);
+        var entity = client.post().uri("/responses").contentType(MediaType.APPLICATION_JSON)
+                .header("Authorization", "Bearer " + apiKey()).body(body).retrieve().toEntity(JsonNode.class);
+        JsonNode response = entity.getBody();
         if (response == null || !"completed".equals(response.path("status").asText())) {
             throw new IllegalStateException("Conversation understanding did not complete");
         }
@@ -221,10 +235,13 @@ public class OpenAiProvider implements AiProvider {
         if (value == null || !value.path("needs_clarification").isBoolean()) {
             throw new IllegalStateException("Invalid conversation understanding response");
         }
-        return new com.lineaibot.line.ConversationContext.Understanding(
+        var understanding = new com.lineaibot.line.ConversationContext.Understanding(
                 value.path("intent").asText(""), value.path("standalone_question").asText(""),
                 value.path("topic").asText(""), value.path("needs_clarification").asBoolean(),
                 value.path("clarification_question").asText(""));
+        return new ConversationUnderstandingResult(understanding,
+                responseUsage(response, estimateTokens(toJson(body)), estimateTokens(extractOutputText(response))),
+                name(), generationModel(), entity.getHeaders().getFirst("x-request-id"));
     }
 
     private String extractOutputText(JsonNode response) {

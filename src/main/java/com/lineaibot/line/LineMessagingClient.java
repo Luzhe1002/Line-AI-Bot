@@ -211,6 +211,12 @@ public class LineMessagingClient {
                 : text.substring(0, MAX_ERROR_BODY_LENGTH) + "…";
     }
 
+    public void setDefaultRichMenu(String channelAccessToken, String richMenuId) {
+        restClient.post().uri(apiBaseUrl() + "/v2/bot/user/all/richmenu/" + richMenuId)
+                .header("Authorization", "Bearer " + channelAccessToken)
+                .retrieve().toBodilessEntity();
+    }
+
     public void linkRichMenu(
             String channelAccessToken, String lineUserId, String richMenuId) {
         restClient.post()

@@ -117,7 +117,7 @@ public class LineEventProcessor {
             } else {
                 reply = ConversationContext.Reply.plain(List.of(Map.of(
                         "type", "text",
-                        "text", "目前僅支援文字訊息與預約操作。")));
+                        "text", "目前請使用文字訊息或選單操作。")));
             }
 
             if (prepared.isEmpty()) {

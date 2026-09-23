@@ -13,7 +13,7 @@ class MerchantRichMenuImageFactoryTest {
 
     @Test
     void rendersLineCompatibleRoleMenus() throws Exception {
-        for (String role : new String[] {"OWNER", "MANAGER", "VIEWER"}) {
+        for (String role : new String[] {"OWNER", "MANAGER", "VIEWER", "OWNER_SUPPORT", "MANAGER_SUPPORT", "VIEWER_SUPPORT", "CUSTOMER_SUPPORT", "CUSTOMER_BOOKING"}) {
             byte[] png = factory.create(role);
             var image = ImageIO.read(new ByteArrayInputStream(png));
 

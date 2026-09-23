@@ -57,7 +57,7 @@ public final class MerchantDtos {
             String timezone,
             int slotMinutes,
             StaffView staff,
-            List<ServiceOption> services) {}
+            List<ServiceOption> services, boolean bookingEnabled) {}
 
     public record ServiceOption(String id, String name) {}
 

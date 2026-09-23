@@ -57,6 +57,15 @@ public class ConversationService {
         if (text.strip().matches("(?:重新開始|清除對話|重設對話|reset)")) {
             return ConversationContext.Reply.plain(List.of(textMessage("好的，已重新開始。請告訴我想詢問的問題。")));
         }
+        if ("查詢預約".equals(text.strip()) || "我的預約".equals(text.strip())) {
+            var existing = bookings.upcomingReservations(tenant.id(), lineUserId, 10);
+            return ConversationContext.Reply.plain(List.of(textMessage(existing.isEmpty()
+                    ? "目前沒有尚未結束的預約。"
+                    : existing.stream().map(item -> item.serviceName() + " "
+                        + SLOT_LABEL.format(item.startsAt().atZone(ZoneId.of(tenant.timezone()))))
+                        .collect(java.util.stream.Collectors.joining("\n"))
+                        + "\n需要取消請輸入「取消預約」。")));
+        }
         var resolved = understanding.understand(tenant.id(), lineUserId, text, history);
         if (resolved.needsClarification()) {
             return new ConversationContext.Reply(List.of(textMessage(resolved.clarificationQuestion())),
@@ -113,6 +122,9 @@ public class ConversationService {
     }
 
     private List<Map<String, Object>> bookingOptions(TenantRow tenant, String lineUserId) {
+        if (!tenant.bookingEnabled()) {
+            return List.of(textMessage("店家目前未開放線上預約。您可以詢問商品、服務或營業資訊，或輸入「人工客服」聯絡店家。"));
+        }
         var services = bookingRepository.findActiveServices(tenant.id());
         if (services.isEmpty()) {
             return List.of(textMessage("商家尚未設定可預約服務，請聯絡人工客服。"));
