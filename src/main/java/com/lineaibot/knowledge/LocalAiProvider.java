@@ -51,8 +51,14 @@ public class LocalAiProvider implements AiProvider {
     }
 
     @Override
-    public List<double[]> embedTexts(List<String> texts) {
-        return texts.stream().map(this::embedding).toList();
+    public EmbeddingResult embedTexts(List<String> texts) {
+        long inputTokens = texts.stream().mapToLong(LocalAiProvider::estimateTokens).sum();
+        return new EmbeddingResult(
+                texts.stream().map(this::embedding).toList(),
+                name(),
+                embeddingModel(),
+                null,
+                new TokenUsage(inputTokens, 0, 0, 0, inputTokens));
     }
 
     @Override
@@ -95,7 +101,7 @@ public class LocalAiProvider implements AiProvider {
             }
         }
         if (bestSentence.isBlank() && !bookingEnabled) {
-            return new GeneratedText("目前資料無法確認，請聯絡店家或轉接人工客服。", name(), generationModel(), null);
+            bestSentence = "目前資料無法確認，請聯絡店家或轉接人工客服。";
         }
         if (bestSentence.isBlank()) {
             bestSentence = contexts.getFirst().content().strip();
@@ -103,7 +109,26 @@ public class LocalAiProvider implements AiProvider {
         if (bestSentence.length() > 180) {
             bestSentence = bestSentence.substring(0, 177).stripTrailing() + "…";
         }
-        return new GeneratedText(bestSentence, name(), generationModel(), null);
+        long inputTokens = estimateTokens(question)
+                + contexts.stream()
+                        .mapToLong(context -> estimateTokens(context.content()))
+                        .sum();
+        long outputTokens = estimateTokens(bestSentence);
+        return new GeneratedText(
+                bestSentence,
+                name(),
+                generationModel(),
+                null,
+                new TokenUsage(
+                        inputTokens,
+                        0,
+                        outputTokens,
+                        0,
+                        inputTokens + outputTokens));
+    }
+
+    private static long estimateTokens(String value) {
+        return Math.max(1, (long) Math.ceil(value.length() / 4.0));
     }
 
     private Set<String> answerFeatures(String value) {

@@ -11,9 +11,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.lineaibot.booking.BookingAccessTokenService;
+import com.lineaibot.config.AppProperties;
+import com.lineaibot.knowledge.AiUsageService;
+import com.lineaibot.knowledge.KnowledgeService;
 import com.lineaibot.line.LineEventProcessor;
 import com.lineaibot.line.LineRepository;
 import com.lineaibot.shared.SecurityHeadersFilter;
+import com.lineaibot.tenant.TenantRepository;
 import java.nio.charset.StandardCharsets;
 import java.time.DayOfWeek;
 import java.time.Instant;
@@ -71,6 +75,18 @@ class ApplicationIntegrationTest {
     @Autowired
     private SecurityHeadersFilter securityHeadersFilter;
 
+    @Autowired
+    private KnowledgeService knowledgeService;
+
+    @Autowired
+    private TenantRepository tenantRepository;
+
+    @Autowired
+    private AiUsageService aiUsageService;
+
+    @Autowired
+    private AppProperties appProperties;
+
     private MockMvc mvc;
 
     @BeforeEach
@@ -105,6 +121,9 @@ class ApplicationIntegrationTest {
                 .param("id", id).query(Integer.class).single()).isEqualTo(3);
         configureLineChannel(new Tenant(id, created.path("slug").asText(), key));
         var menuJobs = context.getBean(com.lineaibot.merchant.MerchantRichMenuRepository.class);
+        // Prioritize only this fixture; other tests may already have filled the ten-job batch.
+        jdbc.sql("update customer_menu_sync set next_attempt_at = :due where tenant_id = :id")
+                .param("due", java.time.OffsetDateTime.parse("2000-01-01T00:00:00Z")).param("id", id).update();
         var job = menuJobs.readyCustomerMenus(Instant.now()).stream()
                 .filter(item -> item.tenantId().equals(id)).findFirst().orElseThrow();
         assertThat(menuJobs.claimCustomerMenu(job, Instant.now())).isTrue();
@@ -112,6 +131,8 @@ class ApplicationIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON).content("{\"booking_enabled\":false}"))
                 .andExpect(status().isOk());
         menuJobs.finishCustomerMenu(job, true, Instant.now());
+        jdbc.sql("update customer_menu_sync set next_attempt_at = :due where tenant_id = :id")
+                .param("due", java.time.OffsetDateTime.parse("2000-01-01T00:00:00Z")).param("id", id).update();
         assertThat(menuJobs.readyCustomerMenus(Instant.now())).anySatisfy(pending -> {
             assertThat(pending.tenantId()).isEqualTo(id);
             assertThat(pending.revision()).isGreaterThan(job.revision());
@@ -1070,6 +1091,90 @@ class ApplicationIntegrationTest {
         assertThat(fallback[1]).isNull();
         assertThat(fallback[2]).isEqualTo(originalPayload);
         assertThat(fallback[3]).isEqualTo("SIMULATED");
+    }
+
+    @Test
+    void aiUsageGuardRateLimitsLineUsersAndRecordsTokenUsage() throws Exception {
+        Tenant tenant = createTenant("ai-rate-limit");
+        String datasetId = firstId(getJson(
+                "/api/v1/tenants/" + tenant.id() + "/datasets", tenant.apiKey()));
+        mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/documents",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey())
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "title": "AI 用量測試",
+                                  "content": "本店接受電話與 LINE 預約，營業時間為上午九點到下午六點。"
+                                }
+                                """))
+                .andExpect(status().isCreated());
+        mvc.perform(post(
+                                "/api/v1/tenants/{tenantId}/datasets/{datasetId}/publish",
+                                tenant.id(),
+                                datasetId)
+                        .header("X-Tenant-Api-Key", tenant.apiKey()))
+                .andExpect(status().isOk());
+
+        var tenantRow = tenantRepository.findById(tenant.id()).orElseThrow();
+        for (int index = 0; index < appProperties.getAi().getUserRequestsPerMinute(); index++) {
+            assertThat(knowledgeService.answerFromLine(
+                                    tenantRow, "請問營業時間？", "U-rate-limited-user")
+                            .retrievalMethod())
+                    .isEqualTo("hybrid-vector");
+        }
+
+        var rejected = knowledgeService.answerFromLine(
+                tenantRow, "請問營業時間？", "U-rate-limited-user");
+        assertThat(rejected.retrievalMethod()).isEqualTo("usage-guard");
+        assertThat(rejected.answer()).contains("上限");
+
+        long succeeded = jdbc.sql("""
+                        select count(*) from ai_usage_events
+                        where tenant_id = :tenantId and source = 'LINE'
+                          and status = 'SUCCEEDED' and total_tokens > 0
+                        """)
+                .param("tenantId", tenant.id())
+                .query(Long.class)
+                .single();
+        long rateLimited = jdbc.sql("""
+                        select count(*) from ai_usage_events
+                        where tenant_id = :tenantId and source = 'LINE'
+                          and status = 'REJECTED'
+                          and rejection_reason = 'USER_MINUTE_REQUESTS'
+                        """)
+                .param("tenantId", tenant.id())
+                .query(Long.class)
+                .single();
+        assertThat(succeeded).isEqualTo(appProperties.getAi().getUserRequestsPerMinute());
+        assertThat(rateLimited).isEqualTo(1);
+    }
+
+    @Test
+    void aiCircuitBreakerAndTenantTokenQuotaRejectBeforeProviderCalls() throws Exception {
+        Tenant tenant = createTenant("ai-circuit-breaker");
+
+        var overQuota = aiUsageService.acquire(
+                tenant.id(),
+                "U-over-quota",
+                "LINE",
+                appProperties.getAi().getTenantDailyTokenLimit() + 1,
+                true);
+        assertThat(overQuota.allowed()).isFalse();
+        assertThat(overQuota.rejectionReason()).isEqualTo("TENANT_DAILY_TOKENS");
+
+        appProperties.getAi().setEnabled(false);
+        try {
+            var disabled = aiUsageService.acquire(
+                    tenant.id(), "U-disabled", "LINE", 1, true);
+            assertThat(disabled.allowed()).isFalse();
+            assertThat(disabled.rejectionReason()).isEqualTo("GLOBAL_DISABLED");
+            assertThat(disabled.userMessage()).contains("暫停");
+        } finally {
+            appProperties.getAi().setEnabled(true);
+        }
     }
 
     private void configureLineChannel(Tenant tenant) throws Exception {

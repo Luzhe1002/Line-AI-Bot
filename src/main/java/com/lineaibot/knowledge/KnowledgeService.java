@@ -1,7 +1,9 @@
 package com.lineaibot.knowledge;
 
 import com.lineaibot.config.AppProperties;
+import com.lineaibot.knowledge.AiProvider.EmbeddingResult;
 import com.lineaibot.knowledge.AiProvider.GroundingContext;
+import com.lineaibot.knowledge.AiProvider.TokenUsage;
 import com.lineaibot.knowledge.KnowledgeDtos.AnswerResponse;
 import com.lineaibot.knowledge.KnowledgeDtos.Citation;
 import com.lineaibot.knowledge.KnowledgeDtos.DatasetCreate;
@@ -45,6 +47,7 @@ public class KnowledgeService {
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
     private final CryptoService crypto;
+    private final AiUsageService aiUsage;
 
     public KnowledgeService(
             KnowledgeRepository repository,
@@ -52,13 +55,15 @@ public class KnowledgeService {
             AiProviderRegistry providers,
             AppProperties properties,
             ObjectMapper objectMapper,
-            CryptoService crypto) {
+            CryptoService crypto,
+            AiUsageService aiUsage) {
         this.repository = repository;
         this.indexer = indexer;
         this.providers = providers;
         this.properties = properties;
         this.objectMapper = objectMapper;
         this.crypto = crypto;
+        this.aiUsage = aiUsage;
     }
 
     @Transactional
@@ -224,6 +229,20 @@ public class KnowledgeService {
 
     public AnswerResponse answer(
             TenantRow tenant, String question, String lineUserId) {
+        return answer(tenant, question, lineUserId, "TENANT_API", false);
+    }
+
+    public AnswerResponse answerFromLine(
+            TenantRow tenant, String question, String lineUserId) {
+        return answer(tenant, question, lineUserId, "LINE", true);
+    }
+
+    private AnswerResponse answer(
+            TenantRow tenant,
+            String question,
+            String actorId,
+            String source,
+            boolean enforceActorLimits) {
         AiProvider provider = providers.current();
         var activeDataset = repository.findActiveDataset(tenant.id());
         if (activeDataset.isEmpty()) {
@@ -234,56 +253,93 @@ public class KnowledgeService {
                     "none");
         }
         DatasetRead dataset = activeDataset.get();
-        return answerFromDataset(tenant, dataset, question, lineUserId, provider);
+        return answerFromDataset(
+                tenant,
+                dataset,
+                question,
+                actorId,
+                source,
+                enforceActorLimits,
+                provider);
     }
 
     public AnswerResponse previewAnswer(
             TenantRow tenant, String datasetId, String question) {
         DatasetRead dataset = repository.findDataset(tenant.id(), datasetId)
                 .orElseThrow(() -> new ApiException(HttpStatus.NOT_FOUND, "Dataset not found"));
-        return answerFromDataset(tenant, dataset, question, null, providers.current());
+        return answerFromDataset(
+                tenant, dataset, question, "portal", "PORTAL", false, providers.current());
     }
 
     private AnswerResponse answerFromDataset(
             TenantRow tenant,
             DatasetRead dataset,
             String question,
-            String lineUserId,
+            String actorId,
+            String source,
+            boolean enforceActorLimits,
             AiProvider provider) {
-        List<GroundingContext> contexts = retrieve(
-                tenant.id(), dataset.id(), question, provider);
-        if (contexts.isEmpty()) {
-            return fallback(
-                    provider,
-                    "目前的資料無法確認這個問題，我可以替您轉接人工客服。",
-                    dataset.id(),
-                    "hybrid-vector");
+        long reservation = properties.getAi().getMaxContextChars()
+                + question.length()
+                + properties.getAi().getMaxOutputTokens();
+        var lease = aiUsage.acquire(
+                tenant.id(), actorId, source, reservation, enforceActorLimits);
+        if (!lease.allowed()) {
+            return fallback(provider, lease.userMessage(), dataset.id(), "usage-guard");
         }
-        String subject = tenant.id() + ":" + (lineUserId == null ? "anonymous" : lineUserId);
-        String safetyIdentifier = "line_user_"
-                + crypto.stableHmac(properties.getEncryptionKey(), subject).substring(0, 32);
-        var generated = provider.generateAnswer(
-                question, contexts, tenant.name(), safetyIdentifier, tenant.bookingEnabled());
-        List<Citation> citations = contexts.stream()
-                .map(context -> new Citation(
-                        context.documentId(),
-                        context.chunkId(),
-                        context.title(),
-                        context.sourceUrl(),
-                        round(context.score()),
-                        context.content().length() > 240
-                                ? context.content().substring(0, 240) + "…"
-                                : context.content()))
-                .toList();
-        return new AnswerResponse(
-                generated.text(),
-                round(Math.max(0, Math.min(1, contexts.getFirst().score()))),
-                true,
-                citations,
-                dataset.id(),
-                generated.provider(),
-                generated.model(),
-                "hybrid-vector");
+        try {
+            RetrievalResult retrieval = retrieve(
+                    tenant.id(), dataset.id(), question, provider);
+            List<GroundingContext> contexts = retrieval.contexts();
+            if (contexts.isEmpty()) {
+                aiUsage.succeed(
+                        lease,
+                        retrieval.embedding().usage(),
+                        retrieval.embedding().provider(),
+                        retrieval.embedding().model(),
+                        retrieval.embedding().requestId());
+                return fallback(
+                        provider,
+                        "目前的資料無法確認這個問題，我可以替您轉接人工客服。",
+                        dataset.id(),
+                        "hybrid-vector");
+            }
+            String subject = tenant.id() + ":" + (actorId == null ? "anonymous" : actorId);
+            String safetyIdentifier = "line_user_"
+                    + crypto.stableHmac(properties.getEncryptionKey(), subject).substring(0, 32);
+            var generated = provider.generateAnswer(
+                    question, contexts, tenant.name(), safetyIdentifier, tenant.bookingEnabled());
+            TokenUsage totalUsage = retrieval.embedding().usage().plus(generated.usage());
+            aiUsage.succeed(
+                    lease,
+                    totalUsage,
+                    generated.provider(),
+                    retrieval.embedding().model() + "," + generated.model(),
+                    join(retrieval.embedding().requestId(), generated.requestId()));
+            List<Citation> citations = contexts.stream()
+                    .map(context -> new Citation(
+                            context.documentId(),
+                            context.chunkId(),
+                            context.title(),
+                            context.sourceUrl(),
+                            round(context.score()),
+                            context.content().length() > 240
+                                    ? context.content().substring(0, 240) + "…"
+                                    : context.content()))
+                    .toList();
+            return new AnswerResponse(
+                    generated.text(),
+                    round(Math.max(0, Math.min(1, contexts.getFirst().score()))),
+                    true,
+                    citations,
+                    dataset.id(),
+                    generated.provider(),
+                    generated.model(),
+                    "hybrid-vector");
+        } catch (RuntimeException exception) {
+            aiUsage.fail(lease, exception);
+            throw exception;
+        }
     }
 
     public KnowledgeDtos.ReindexResponse reindex(TenantRow tenant, String datasetId) {
@@ -305,7 +361,7 @@ public class KnowledgeService {
         return dataset;
     }
 
-    private List<GroundingContext> retrieve(
+    private RetrievalResult retrieve(
             String tenantId, String datasetId, String question, AiProvider provider) {
         List<ChunkRow> rows = repository.findSearchableChunks(
                 tenantId,
@@ -313,9 +369,17 @@ public class KnowledgeService {
                 provider.embeddingModel(),
                 provider.embeddingDimensions());
         if (rows.isEmpty()) {
-            return List.of();
+            return new RetrievalResult(
+                    List.of(),
+                    new EmbeddingResult(
+                            List.of(),
+                            provider.name(),
+                            provider.embeddingModel(),
+                            null,
+                            TokenUsage.none()));
         }
-        double[] queryEmbedding = provider.embedTexts(List.of(question)).getFirst();
+        EmbeddingResult embedding = provider.embedTexts(List.of(question));
+        double[] queryEmbedding = embedding.embeddings().getFirst();
         List<GroundingContext> ranked = new ArrayList<>();
         for (ChunkRow row : rows) {
             double lexical = lexicalSimilarity(question, row.title(), row.content());
@@ -349,7 +413,20 @@ public class KnowledgeService {
                     context.score()));
             remainingChars -= content.length();
         }
-        return selected;
+        return new RetrievalResult(selected, embedding);
+    }
+
+    private record RetrievalResult(
+            List<GroundingContext> contexts, EmbeddingResult embedding) {}
+
+    private String join(String first, String second) {
+        if (first == null || first.isBlank()) {
+            return second;
+        }
+        if (second == null || second.isBlank()) {
+            return first;
+        }
+        return first + "," + second;
     }
 
     private AnswerResponse fallback(

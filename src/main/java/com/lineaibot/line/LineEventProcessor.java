@@ -26,6 +26,8 @@ public class LineEventProcessor {
     private final CryptoService crypto;
     private final AppProperties properties;
     private final ObjectMapper objectMapper;
+    private final ConversationContextService contexts;
+    private final ConversationContextRepository turns;
 
     public LineEventProcessor(
             LineRepository lineRepository,
@@ -35,7 +37,9 @@ public class LineEventProcessor {
             LineMessagingClient lineClient,
             CryptoService crypto,
             AppProperties properties,
-            ObjectMapper objectMapper) {
+            ObjectMapper objectMapper,
+            ConversationContextService contexts,
+            ConversationContextRepository turns) {
         this.lineRepository = lineRepository;
         this.tenantRepository = tenantRepository;
         this.conversation = conversation;
@@ -44,6 +48,8 @@ public class LineEventProcessor {
         this.crypto = crypto;
         this.properties = properties;
         this.objectMapper = objectMapper;
+        this.contexts = contexts;
+        this.turns = turns;
     }
 
     public void process(String eventId) {
@@ -52,6 +58,7 @@ public class LineEventProcessor {
             log.warn("LINE event disappeared before processing eventId={}", eventId);
             return;
         }
+        if (!"PROCESSING".equals(event.status())) return;
         try {
             var tenant = tenantRepository.findById(event.tenantId())
                     .filter(TenantRepository.TenantRow::active)
@@ -77,31 +84,49 @@ public class LineEventProcessor {
             if (event.attempts() > 1
                     && lineClient.pushFailedReplyIfPresent(
                             tenant.id(), token, replyToken, lineUserId)) {
+                turns.delivered(tenant.id(), lineUserId, eventId, Instant.now());
                 lineRepository.markEventProcessed(eventId, Instant.now());
                 return;
             }
 
-            List<Map<String, Object>> messages;
+            String sourceKey = ConversationContextService.sourceKey(payload.path("source"), eventId);
+            var prepared = turns.prepared(tenant.id(), eventId);
+            ConversationContext.Reply reply;
             String eventType = payload.path("type").asText("");
-            if ("message".equals(eventType)
+            String customerText = "";
+            String messageType = "text";
+            if (prepared.isPresent()) {
+                reply = prepared.get();
+            } else if ("message".equals(eventType)
                     && "text".equals(payload.path("message").path("type").asText(""))) {
                 String text = payload.path("message").path("text").asText("");
-                messages = merchantConversation.handleText(tenant, lineUserId, text)
+                customerText = text;
+                reply = merchantConversation.handleText(tenant, lineUserId, text)
+                        .map(ConversationContext.Reply::plain)
                         .orElseGet(() -> conversation.handleText(
-                                tenant, lineUserId, text));
+                                tenant, lineUserId, text, contexts.load(tenant.id(), lineUserId, sourceKey, Instant.now())));
             } else if ("postback".equals(eventType)) {
                 String data = payload.path("postback").path("data").asText("");
-                messages = merchantConversation.handlePostback(tenant, lineUserId, data)
+                customerText = data;
+                messageType = "postback";
+                reply = merchantConversation.handlePostback(tenant, lineUserId, data)
+                        .map(ConversationContext.Reply::plain)
                         .orElseGet(() -> conversation.handlePostback(
-                                tenant, lineUserId, data, event.webhookEventId()));
+                                tenant, lineUserId, data, event.webhookEventId(),
+                                contexts.load(tenant.id(), lineUserId, sourceKey, Instant.now())));
             } else {
-                messages = List.of(Map.of(
+                reply = ConversationContext.Reply.plain(List.of(Map.of(
                         "type", "text",
-                        "text", "目前請使用文字訊息或選單操作。"));
+                        "text", "目前請使用文字訊息或選單操作。")));
+            }
+
+            if (prepared.isEmpty()) {
+                turns.prepare(tenant.id(), lineUserId, sourceKey, eventId, customerText, messageType, reply, Instant.now());
             }
 
             lineClient.reply(
-                    tenant.id(), token, replyToken, lineUserId, messages);
+                    tenant.id(), token, replyToken, lineUserId, reply.messages());
+            turns.delivered(tenant.id(), lineUserId, eventId, Instant.now());
             lineRepository.markEventProcessed(eventId, Instant.now());
             log.info(
                     "LINE event processed eventId={} tenantId={} attempt={}",

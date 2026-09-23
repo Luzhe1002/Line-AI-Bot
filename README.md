@@ -33,7 +33,7 @@
 - 顧客預設 LINE 圖文選單由系統依模式管理，會取代既有的預設選單；已綁定人員仍使用角色專屬選單。切換後背景同步，LINE API 失敗會重試，可能有短暫顯示延遲。
 - 客服總覽提供待處理案件（每次最多 100 件）；到 LINE 官方帳號聊天室回覆顧客，再在後台標記已處理。結案不會自動傳訊。
 
-升級使用新增的 Flyway V10；既有店家維持預約啟用，既有遷移及預約資料不變。建立店家的 API 新增 `booking_enabled`（省略時為 `false`）；既有整合若需要預約，請明確傳入 `true`。
+升級使用新增的 Flyway V11；既有店家維持預約啟用，既有遷移及預約資料不變。建立店家的 API 新增 `booking_enabled`（省略時為 `false`）；既有整合若需要預約，請明確傳入 `true`。
 
 ## 核心架構
 
@@ -308,6 +308,18 @@ APP_AI_GENERATION_MODEL=gpt-5.6-luna
 APP_AI_EMBEDDING_MODEL=text-embedding-3-small
 APP_AI_EMBEDDING_DIMENSIONS=512
 ```
+
+AI 呼叫預設啟用資料庫式用量管控：同一 LINE 使用者每分鐘 5 次、每日 50 次，
+每租戶每日 1,000 次／500,000 tokens，全平台每日 5,000,000 tokens，且單租戶
+最多 8 個進行中請求。可由 `.env` 的 `APP_AI_USER_REQUESTS_PER_MINUTE`、
+`APP_AI_USER_REQUESTS_PER_DAY`、`APP_AI_TENANT_REQUESTS_PER_DAY`、
+`APP_AI_TENANT_DAILY_TOKEN_LIMIT`、`APP_AI_GLOBAL_DAILY_TOKEN_LIMIT` 與
+`APP_AI_MAX_CONCURRENT_REQUESTS_PER_TENANT` 調整。事故時設定
+`APP_AI_ENABLED=false` 可全域停止新 AI 呼叫；超限時直接回覆固定訊息，不會呼叫 Provider。
+
+每次問答與文件索引都會寫入 `ai_usage_events`，保存租戶、HMAC 使用者識別、來源、
+狀態、模型、Provider request ID，以及 input／cached／output／reasoning／total tokens。
+失敗或逾時租約會保守以預留 tokens 計入當日額度，避免用失敗重試繞過成本上限。
 
 目前 Render 測試環境已使用 OpenAI Provider；`OPENAI_API_KEY` 只存於
 Render Secret，`render.yaml` 僅以 `sync: false` 宣告變數名稱。

@@ -63,10 +63,16 @@ public class LineRepository {
 
     public List<String> findReadyEventIds(Instant now, int limit) {
         return jdbc.sql("""
-                        select id from line_events
-                        where status in ('PENDING', 'RETRY')
-                          and next_attempt_at <= :now
-                        order by received_at
+                        select e.id from line_events e
+                        where e.status in ('PENDING', 'RETRY')
+                          and e.next_attempt_at <= :now
+                          and not exists (
+                              select 1 from line_events earlier
+                              where earlier.tenant_id = e.tenant_id
+                                and earlier.line_user_id = e.line_user_id
+                                and earlier.event_sequence < e.event_sequence
+                                and earlier.status in ('PENDING', 'RETRY', 'PROCESSING'))
+                        order by e.event_sequence
                         limit :limit
                         """)
                 .param("now", utc(now))
@@ -77,11 +83,17 @@ public class LineRepository {
 
     public boolean claimEvent(String eventId, Instant now) {
         return jdbc.sql("""
-                        update line_events
+                        update line_events e
                         set status = 'PROCESSING', attempts = attempts + 1,
                             locked_at = :now, error = null
                         where id = :id and status in ('PENDING', 'RETRY')
                           and next_attempt_at <= :now
+                          and not exists (
+                              select 1 from line_events earlier
+                              where earlier.tenant_id = e.tenant_id
+                                and earlier.line_user_id = e.line_user_id
+                                and earlier.event_sequence < e.event_sequence
+                                and earlier.status in ('PENDING', 'RETRY', 'PROCESSING'))
                         """)
                         .param("now", utc(now))
                         .param("id", eventId)
@@ -212,6 +224,14 @@ public class LineRepository {
                         .param("lineUserId", lineUserId)
                         .query(String.class)
                         .optional();
+    }
+
+    public void updateHandoffReason(String tenantId, String userId, String ticketId, String reason) {
+        jdbc.sql("""
+                update handoff_tickets set reason = :reason
+                where id = :id and tenant_id = :tenant and line_user_id = :user and status = 'OPEN'
+                """).param("reason", reason).param("id", ticketId)
+                .param("tenant", tenantId).param("user", userId).update();
     }
 
     public String insertHandoff(
@@ -361,6 +381,8 @@ public class LineRepository {
     }
 
     private OffsetDateTime utc(Instant value) {
-        return OffsetDateTime.ofInstant(value, ZoneOffset.UTC);
+        // PostgreSQL/H2 timestamp precision is microseconds. Avoid rounding an
+        // enqueue time into the future relative to an immediately following claim.
+        return OffsetDateTime.ofInstant(value.truncatedTo(java.time.temporal.ChronoUnit.MICROS), ZoneOffset.UTC);
     }
 }

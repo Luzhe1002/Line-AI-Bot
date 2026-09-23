@@ -55,6 +55,11 @@ app:
   line-api-base-url: ${APP_LINE_API_BASE_URL:https://api.line.me}
   line-api-data-base-url: ${APP_LINE_API_DATA_BASE_URL:https://api-data.line.me}
   public-base-url: ${APP_PUBLIC_BASE_URL:http://localhost:8000}
+  conversation:
+    enabled: ${APP_CONVERSATION_ENABLED:true}
+    idle-minutes: ${APP_CONVERSATION_IDLE_MINUTES:30}
+    max-turns: ${APP_CONVERSATION_MAX_TURNS:5}
+    max-chars: ${APP_CONVERSATION_MAX_CHARS:6000}
   ai:
     provider: ${APP_AI_PROVIDER:local}
     generation-model: ${APP_AI_GENERATION_MODEL:gpt-5.6-luna}
@@ -68,5 +73,13 @@ app:
     chunk-overlap-chars: ${APP_AI_CHUNK_OVERLAP_CHARS:150}
     max-output-tokens: ${APP_AI_MAX_OUTPUT_TOKENS:500}
     timeout-seconds: ${APP_AI_TIMEOUT_SECONDS:20}
+    enabled: ${APP_AI_ENABLED:true}
+    user-requests-per-minute: ${APP_AI_USER_REQUESTS_PER_MINUTE:5}
+    user-requests-per-day: ${APP_AI_USER_REQUESTS_PER_DAY:50}
+    tenant-requests-per-day: ${APP_AI_TENANT_REQUESTS_PER_DAY:1000}
+    tenant-daily-token-limit: ${APP_AI_TENANT_DAILY_TOKEN_LIMIT:500000}
+    global-daily-token-limit: ${APP_AI_GLOBAL_DAILY_TOKEN_LIMIT:5000000}
+    max-concurrent-requests-per-tenant: ${APP_AI_MAX_CONCURRENT_REQUESTS_PER_TENANT:8}
+    pending-lease-seconds: ${APP_AI_PENDING_LEASE_SECONDS:120}
     openai-api-key: ${OPENAI_API_KEY:}
     openai-base-url: ${APP_OPENAI_BASE_URL:https://api.openai.com/v1}
