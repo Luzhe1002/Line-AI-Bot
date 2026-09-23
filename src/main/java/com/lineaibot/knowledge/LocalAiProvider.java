@@ -101,7 +101,7 @@ public class LocalAiProvider implements AiProvider {
             }
         }
         if (bestSentence.isBlank() && !bookingEnabled) {
-            bestSentence = "目前資料無法確認，請聯絡店家或轉接人工客服。";
+            bestSentence = "這個我還不太確定，怕跟您說錯了。您可以輸入「人工客服」，請店家幫您確認喔。";
         }
         if (bestSentence.isBlank()) {
             bestSentence = contexts.getFirst().content().strip();

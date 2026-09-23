@@ -248,7 +248,7 @@ public class KnowledgeService {
         if (activeDataset.isEmpty()) {
             return fallback(
                     provider,
-                    "目前尚未發布可用的客服資料，請轉由人工客服協助。",
+                    "不好意思，這邊還沒有足夠的資訊能回答您。您可以輸入「人工客服」，請店家幫您確認喔。",
                     null,
                     "none");
         }
@@ -300,7 +300,7 @@ public class KnowledgeService {
                         retrieval.embedding().requestId());
                 return fallback(
                         provider,
-                        "目前的資料無法確認這個問題，我可以替您轉接人工客服。",
+                        "這個我還不太確定，怕跟您說錯了。您可以輸入「人工客服」，請店家幫您確認喔。",
                         dataset.id(),
                         "hybrid-vector");
             }
