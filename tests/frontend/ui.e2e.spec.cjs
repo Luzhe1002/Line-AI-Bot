@@ -342,3 +342,28 @@ test("merchant can switch modes while retaining existing reservation management"
   await expect(page.locator('[data-view="services"]')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });
+
+for (const width of [320, 1280]) {
+  test(`merchant settings has structured fields and usable controls at ${width}px`, async ({ page }, testInfo) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/portal/#token=e2e-token");
+    await page.getByRole("button", { name: "商家設定", exact: true }).click();
+    const fields = page.locator("#merchant-settings-summary dd");
+    await expect(fields).toHaveCount(4);
+    await expect(fields.first()).toHaveText("暖心咖啡");
+    for (const field of await fields.all()) {
+      await expect(field).toBeVisible();
+      const bounds = await field.boundingBox();
+      expect(bounds.height).toBeGreaterThanOrEqual(44);
+      expect(bounds.x).toBeGreaterThanOrEqual(0);
+      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+      await expect(field).toHaveCSS("border-top-style", "solid");
+    }
+    await expect(page.locator("#features-form").getByRole("checkbox")).toBeVisible();
+    await page.screenshot({ path: testInfo.outputPath(`settings-${width}.png`), fullPage: true });
+    await page.getByRole("button", { name: "管理 LINE 串接", exact: true }).click();
+    await expect(page.locator("#channel-secret")).toBeVisible();
+    await expect(page.locator("#channel-access-token")).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  });
+}

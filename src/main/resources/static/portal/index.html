@@ -5,9 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="description" content="商家專用 LINE AI 客服管理後台">
   <title>店家 AI 工作台</title>
-  <link rel="stylesheet" href="/portal/styles.css?v=20260918-optional-booking">
-  <script src="/shared/ui-utils.js?v=20260918-optional-booking" defer></script>
-  <script src="/portal/app.js?v=20260918-optional-booking" defer></script>
+  <link rel="stylesheet" href="/portal/styles.css?v=20260923-settings">
+  <script src="/shared/ui-utils.js?v=20260923-settings" defer></script>
+  <script src="/portal/app.js?v=20260923-settings" defer></script>
 </head>
 <body>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
@@ -313,22 +313,24 @@
       </section>
 
       <section id="view-settings" class="view hidden">
-        <article class="panel stack">
-          <h2>商家基本資料</h2>
-          <p class="muted">店家基本資料、功能模式與 LINE 串接。</p>
-          <dl id="merchant-settings-summary"></dl>
-          <form id="features-form" class="stack">
-            <h3>店家功能</h3>
-            <p>AI 客服、知識庫與轉人工持續提供。</p>
-            <label class="feature-choice"><input name="booking_enabled" type="checkbox" aria-describedby="booking-feature-help">啟用線上預約</label>
+        <div class="settings-grid">
+          <article class="panel settings-profile" aria-labelledby="merchant-profile-title">
+            <h3 id="merchant-profile-title">商家基本資料</h3>
+            <p class="muted">以下為建立商家時設定的資料，僅供查看。</p>
+            <dl id="merchant-settings-summary" class="settings-fields"></dl>
+          </article>
+          <form id="features-form" class="panel stack settings-features" aria-labelledby="merchant-features-title">
+            <div><h3 id="merchant-features-title">店家功能</h3><p class="muted">AI 客服、知識庫與轉人工持續提供。</p></div>
+            <label class="feature-choice settings-feature-choice"><input name="booking_enabled" type="checkbox" aria-describedby="booking-feature-help"><span>啟用線上預約<small>讓顧客選擇服務與預約時段</small></span></label>
             <p id="booking-feature-help" class="muted">停用後停止接受新預約；既有預約與取消通知保留。儲存後，LINE 顧客及人員選單會在背景同步。</p>
-            <p class="muted">顧客預設選單會由本系統依模式管理，取代原有的預設圖文選單。</p>
+            <p class="fine-print">顧客預設選單會由本系統依模式管理，取代原有的預設圖文選單。</p>
             <button class="primary" type="submit">儲存功能設定</button>
           </form>
-          <h3>LINE 串接</h3>
-          <p class="muted">由商家擁有者或管理金鑰持有人設定官方帳號憑證與 Webhook。</p>
-          <button class="secondary" data-go-view="line" type="button">管理 LINE 串接</button>
-        </article>
+          <article class="panel settings-channel" aria-labelledby="merchant-channel-title">
+            <div><h3 id="merchant-channel-title">LINE 串接</h3><p class="muted">管理官方帳號憑證、Webhook 與回覆狀態。</p><p class="fine-print">由商家擁有者或管理金鑰持有人設定。</p></div>
+            <button class="secondary" data-go-view="line" type="button">管理 LINE 串接</button>
+          </article>
+        </div>
       </section>
 
       <section id="view-line" class="view hidden">

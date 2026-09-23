@@ -411,3 +411,7 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 | `POST /webhooks/line/{tenantSlug}` | LINE Webhook |
 | `POST /portal/api/line-session` | 以 OWNER 的十分鐘單次 LINE 管理 Token 換取工作台 Session |
 | `DELETE /portal/api/staff/{staffId}` | 移除人員管理權限並排程解除 LINE 個人選單 |
+
+## 正式發布
+
+採 main 整合、production 正式發布；流程與首次啟用見 [正式發布管理](docs/production-release.md)。

@@ -364,7 +364,7 @@ function renderSettings() {
     ["網址代稱", state.tenant.slug],
     ["時區", state.tenant.timezone],
     ...(bookingEnabled() ? [["預約間隔", `${state.tenant.slot_minutes} 分鐘`]] : []),
-  ].map(([label, value]) => `<dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd>`).join("");
+  ].map(([label, value]) => `<div class="settings-field"><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`).join("");
   const line = state.overview.line_channel;
   const configured = Boolean(line.configured);
   const enabled = configured && Boolean(line.enabled);
