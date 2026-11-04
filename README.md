@@ -14,7 +14,22 @@
 
 顧客可以直接透過 LINE 詢問商家資訊，由系統從該商家的已發布知識庫檢索資料並產生附有來源的回答；需要預約時，則開啟綁定 LINE 身分的行動預約頁選擇時段。店家人員可沿用同一個 LINE 官方帳號查詢、取消及管理預約，不必另外安裝管理 App。
 
-系統採 Java 21／Spring Boot 4 模組化單體架構，使用 Spring JDBC、Flyway 與 PostgreSQL。原 FastAPI 原始碼保留作為遷移與 HTTP 契約比對用途，目前不由 Docker Compose 啟動。
+系統採 Java 21／Spring Boot 4 模組化單體架構，使用 Spring JDBC、Flyway 與 PostgreSQL。開發、測試與部署皆以 Java 服務為主，不需要安裝 Python。
+
+## 文件導覽與程式入口
+
+| 內容 | 入口 |
+|---|---|
+| Java 後端與設定 | `src/main/java`、`src/main/resources`、`pom.xml` |
+| 資料庫版本管理 | `src/main/resources/db/migration`（Flyway） |
+| 商家與顧客網頁 | `src/main/resources/static` |
+| 現行測試 | `src/test`、`tests/**/*.cjs`（含根目錄測試）、`playwright.config.cjs` |
+| 共用驗證與 CI | `scripts/verify.ps1`、`.github/workflows/ci.yml` |
+| 設計與功能 | [系統架構](docs/architecture.md)、[短期對話上下文](docs/conversation-context.md) |
+| 限制與營運 | [專案檢視](docs/project-review.md)、[操作手冊](docs/operations-runbook.md) |
+| 舊版資料與程式辨識 | [歷史遷移參考](docs/java-migration.md)（僅處理舊資料時閱讀） |
+
+Repository 仍保留部分舊版檔案；它們不屬於現行執行與驗收流程。
 
 | 使用者 | 主要功能 |
 |---|---|
@@ -284,8 +299,8 @@ LINE 或假裝同步成功；切換為真實 LINE 模式後會處理既有 READY
 {APP_PUBLIC_BASE_URL}/webhooks/line/{tenantSlug}
 ```
 
-目前 Render 測試環境已啟用真實 LINE API，公開網址為
-`https://line-ai-bot-mj1n.onrender.com`。商家仍必須在工作台保存各自的
+`render.yaml` 宣告啟用真實 LINE API；實際啟用狀態須核對 Render 環境設定與部署版本。
+展示網址為 `https://line-ai-bot-mj1n.onrender.com`。商家仍必須在工作台保存各自的
 Channel Secret／Access Token，並在 LINE Developers Console 啟用對應 Webhook。
 
 ## AI 與 RAG
@@ -321,8 +336,8 @@ AI 呼叫預設啟用資料庫式用量管控：同一 LINE 使用者每分鐘 5
 狀態、模型、Provider request ID，以及 input／cached／output／reasoning／total tokens。
 失敗或逾時租約會保守以預留 tokens 計入當日額度，避免用失敗重試繞過成本上限。
 
-目前 Render 測試環境已使用 OpenAI Provider；`OPENAI_API_KEY` 只存於
-Render Secret，`render.yaml` 僅以 `sync: false` 宣告變數名稱。
+`render.yaml` 宣告使用 OpenAI Provider，`OPENAI_API_KEY` 以 `sync: false` 宣告，
+部署時由 Render Secret 注入；實際 Provider 與憑證狀態須在部署環境核對。
 
 OpenAI 請求使用 `store=false`，且傳送的 LINE User ID 會先轉成穩定 HMAC 識別碼。切換 Provider、Embedding 模型或維度後，既有資料集必須呼叫：
 
@@ -337,7 +352,7 @@ POST /api/v1/tenants/{tenantId}/datasets/{datasetId}/reindex
 以下任一條件成立時再導入外部 MQ：
 
 - API 與 Worker 必須獨立部署或獨立擴縮。
-- Webhook 持續流量超過約 100 events/s，或 `P95 queue delay` 超過 2 秒。
+- Webhook 流量或 `P95 queue delay` 持續超過量測後訂定的容量目標；ADR 中的數字是評估門檻，不代表已驗證吞吐量。
 - 知識匯入等長任務會堵住 LINE 回覆快速通道。
 - 需要 Broker 層的 Dead-letter Queue、跨服務事件訂閱或區域級容錯。
 - PostgreSQL 的事件 Claim 造成可觀察的鎖競爭或連線池壓力。
@@ -366,7 +381,7 @@ docker compose config --quiet
 ```
 
 沒有 Maven 時，驗證腳本會自動使用 Docker `test` stage。CI 會在 Push 與 Pull
-Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions 的 minor／patch
+Request 執行同一套驗證（Push 限 `main`／`production`，也可手動觸發）；Dependabot 將 Maven、npm 與 GitHub Actions 的 minor／patch
 更新分組。Java 21 Docker build／runtime image 由人工規劃升級，避免自動跨 JDK major。
 
 測試覆蓋 Platform／Tenant 權限、多租戶隔離、預約冪等與時段競爭、
@@ -374,18 +389,18 @@ Request 執行同一套驗證；Dependabot 將 Maven、npm 與 GitHub Actions �
 通知事件、單次管理 Session、封鎖時段、
 知識庫隔離、LINE 原始 Body 簽章、事件去重及模擬 Outbox。
 
-原 FastAPI 驗證仍可另外執行，但只代表舊版參考實作：
-
-```powershell
-.\.venv\Scripts\python -m pytest
-```
+Java 整合測試目前使用 H2 的 PostgreSQL 相容模式；這不等同實際 PostgreSQL 的
+交易、鎖與方言驗證。目前尚未納入 Testcontainers PostgreSQL 測試或容量壓測。
+舊版測試不列入現行驗收，請以本節與 CI 的 Java／Node／Playwright 流程為準。
 
 完整驗收依據、已知風險與未驗證範圍請見 [專案稽核報告](docs/project-review.md)。
 部署、事故處理與還原程序請見 [操作手冊](docs/operations-runbook.md)。
 
-## 舊資料遷移
+## 資料儲存
 
-現有 `line_ai_bot.db` 是舊 FastAPI／SQLite 資料，不會被 Java 服務自動讀取。新服務預設建立 `line_ai_bot_java.mv.db`，Docker 則使用 PostgreSQL。正式切換前請依 [Java 遷移說明](docs/java-migration.md) 搬移資料、驗證筆數，並重新建立知識向量。
+Java 本機預設使用 H2 檔案 `line_ai_bot_java.mv.db`，Docker Compose 使用 PostgreSQL。
+舊版 SQLite 不會被 Java 自動讀取。只有需要搬移舊資料時，才參考
+[歷史遷移說明](docs/java-migration.md)；新環境直接依本文件啟動，不需執行舊版 Migration。
 
 ## 主要 API
 
