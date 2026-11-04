@@ -7,7 +7,7 @@ description: Manage release branches, pull requests, migrations and Render produ
 
 適用儲存庫：Luzhe1002/Line-AI-Bot。先確認 remote，其他專案不自動套用此分支策略。
 
-- 讀取專案 AGENTS.md 與 docs/production-release.md，檢查實際分支、PR、CI、Render 部署設定；文件不是遠端設定已生效的證據。
+- 讀取專案 AGENTS.md 與 docs/production-release.md，核對 remote、分支、上游、工作區與既有 PR。只有部署／發布任務才查 Render 實際設定；文件不是遠端設定已生效的證據。
 - 功能分支 PR 進 main；正式發布由同倉庫 main PR 進 production。main 是整合分支，不代表正式版本。已合併功能的後續獨立工作從最新 main 分支；未合併同功能沿用原分支。
 - 發布 PR 使用 merge commit 保留兩條長期分支共同歷史；不 squash/rebase production 發布。重用既有發布 PR，可用 scripts/New-Release.ps1 建立。
 - production 必須受 PR 與 verify 成功保護；禁止 force push、刪除及繞過檢查。CI 與 Render checksPass 都需要確認實際生效。
@@ -15,3 +15,6 @@ description: Manage release branches, pull requests, migrations and Render produ
 - 已套用 migration 不刪除、不改 checksum、不 repair、不停用驗證。修正以新 migration 接續；回復應用前確認資料庫相容性。
 - 發布管理、建立 PR 或修 UI 的授權，不自動等於合併或部署授權；沿用對話已有的明確授權，不重複確認。
 - 提交前依變更執行驗證；推送後核對遠端 SHA，附上 PR。區分本機測試、CI、合併、Render 部署與健康檢查結果，不能以其中一項代替另一項。
+- 功能／文件 PR 僅包含授權範圍，保留既有修改；獨立工作核對最新 main 與差異，避免帶入其他功能提交。同一 head/base 已有開啟 PR 時更新該 PR。
+- 驗證依開發 skill 與變更範圍選擇。CI 的 push 觸發限 main／production，所有 PR 與 workflow_dispatch 亦執行；以實際 workflow 與該 commit 的 checks 為準。CI 包含 scripts/check-release-policy.cjs、scripts/verify.ps1 與 package 容器建置。
+- 使用 scripts/New-Release.ps1 前確認腳本行為與目標；無法取得遠端或部署證據時回報具體未確認項目，不推定成功。
