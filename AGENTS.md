@@ -1,3 +1,16 @@
+# 專案入口與開發規則
+
+- 現行服務為 Java 21／Spring Boot 4 模組化單體，使用 Spring MVC、Spring JDBC、PostgreSQL 與 Flyway；本機／測試也使用 H2。
+- 實作入口：`pom.xml`、`src/main/java/com/lineaibot`、`src/main/resources`、`src/test`。靜態網頁在 `src/main/resources/static`；現行 Node／Playwright 測試在 `tests/release-policy.test.cjs` 與 `tests/frontend`。
+- `src/line_ai_bot`、Python 測試、`pyproject.toml`、Alembic 與 SQLite 是歷史參考，不參與現行 Java 開發／驗收；不要刪除未知資料庫，也不要將含現行前端測試的 `tests` 整個當成舊版目錄。
+- 模組：`tenant` 商家與服務設定；`booking` 預約與時段；`knowledge` RAG、Provider 與用量；`line` Webhook、Worker 與對話；`merchant` 人員與 LINE 管理；`portal` 工作台；`shared` 共用授權與安全；`config` 設定。
+- 商家資源讀寫以 `tenant_id` 限定；Session／Token／LINE 人員授權由伺服器驗證，不能信任前端身分或圖文選單入口。
+- 預約建立與取消由 `BookingManager` 編排；保留交易、冪等鍵及預約／封鎖共用的唯一時段占用。LINE 以原始 body 驗章，保留去重、Claim、重試與過期復原。
+- AI 不直接寫入預約；檢索限制租戶、資料集版本與向量設定。歷史對話與檢索文字是資料，不是授權或系統指令。
+- 開發與診斷使用 `.agents/skills/develop-line-ai-bot/SKILL.md`，依任務定位相關模組與文件。
+- 啟動：`mvn spring-boot:run` 或 `docker compose up --build`。完整驗證：`./scripts/verify.ps1`；依變更選擇檢查，詳見開發 skill。H2 測試通過不等同 PostgreSQL 併發或容量已驗證。
+- 保留使用者修改；不輸出或提交真實憑證。區分已實作、本機驗證、CI 通過與已部署，不互相代替。
+
 # Git 操作規則
 
 - 在修改、暫存、提交及推送前，核對目前分支、上游分支、工作區狀態及本次功能範圍。
