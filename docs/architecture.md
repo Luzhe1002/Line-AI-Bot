@@ -2,7 +2,9 @@
 
 ## 核心決策
 
-服務採 Java 21／Spring Boot 4 模組化單體。HTTP 契約維持原 FastAPI 版本的路徑、Snake Case JSON 與 API Key Header，因此商家端不必因後端語言切換而修改整合。
+服務採 Java 21／Spring Boot 4 模組化單體，使用 Spring MVC、Spring JDBC 與 Flyway。
+HTTP API 使用 Snake Case JSON 與 API Key Header；網頁管理入口另以 Session 與 CSRF 保護。
+現行執行入口為 `src/main/java`，部署與驗證流程不需要 Python。
 
 模組邊界：
 
@@ -10,12 +12,13 @@
 - `booking`：可預約時段、建立、冪等及取消；`BookingManager` 是唯一預約寫入入口。
 - `knowledge`：資料集、切塊、Embedding、租戶限定檢索與可信回答。
 - `line`：原始 Body 簽章、事件去重、持久化 Worker、對話編排及 Outbox。
+- `merchant`：店家人員、LINE 管理入口、圖文選單、通知與行動管理。
 - `shared`：API 權限、密碼學與一致的錯誤格式。
 - `config`：型別化環境設定與有界 LINE Worker。
 
 Repository 使用 Spring `JdbcClient`。所有可由 API、Session 或 LINE 使用者指定資源的
 商家資料 SQL 都明確帶入 `tenant_id`；少數 Worker 內部 Queue 操作以全域 UUID Claim，
-只接受前一步從資料庫取得的 ID。這比在轉換初期依賴隱含 ORM Filter 更容易稽核隔離條件。
+只接受前一步從資料庫取得的 ID。租戶隔離條件直接呈現在 SQL 中，便於檢查。
 
 ## 執行流程
 
@@ -61,7 +64,7 @@ flowchart LR
 2. 先用未修改的 HTTP Body 與 Channel Secret 驗證 `X-Line-Signature`，通過後才解析 JSON。
 3. 用 `tenant_id + webhookEventId` 建立唯一事件；沒有 Event ID 時使用與舊服務相容的 Body／索引雜湊。
 4. Webhook 在事件持久化後立刻回應，避免把模型延遲放在 LINE HTTP Request 內。
-5. 排程器每 250ms Claim 可處理事件，由 Semaphore 限制最多 8 個並行工作。
+5. 排程器預設每 250ms Claim 可處理事件，由 Semaphore 限制預設最多 8 個並行工作；實際值依環境設定。同租戶、同顧客事件的排序與短期上下文見 [對話上下文設計](conversation-context.md)。
 6. Claim 超過兩分鐘仍未完成時會復原為 `RETRY`；每個事件最多嘗試三次，之後標記 `FAILED`。
 7. 回覆先建立 Outbox 稽核紀錄。開發模式標記 `SIMULATED`；真實模式呼叫 LINE 後標記 `SENT` 或 `FAILED`。
 
@@ -138,7 +141,7 @@ Outbox `dedupe_key` 避免已成功的接收者在重試時再次收到通知。
 
 顧客與店家人員仍共用同一個商家官方帳號，但顯示不同範圍的圖文選單：
 
-- 商家既有預設圖文選單仍提供給一般顧客，系統不會加入任何管理按鈕。
+- 一般顧客的預設圖文選單由平台依純客服／客服加預約模式同步，會取代既有預設選單；不包含店家管理按鈕。
 - `merchant_staff` 完成綁定後，系統依 OWNER／MANAGER／VIEWER 建立並綁定
   Messaging API 的 per-user rich menu。個人選單優先於預設選單。
 - 人員角色變更會更新期望角色；停權會把期望狀態改成解除綁定。解除完成後由
@@ -245,7 +248,8 @@ TXT／Markdown／CSV 匯入、索引、發布及回答測試。檔案大小先�
 歷史對話匯入會採獨立流程：檔案掃描、格式解析、個資遮蔽、候選 FAQ 萃取、
 人工核准、加入草稿、索引與發布。未核准的對話不能進入 Active Dataset。
 
-正式上線前仍需完成受管 Secret Manager 與輪替、登入及高成本端點限流、
+目前已具 AI 用量與並行配額；這不等同所有 HTTP 入口的限流。
+正式上線前仍需完成受管 Secret Manager 與輪替、登入／註冊／Webhook 等入口限流、
 Metrics／Tracing／告警、個資保存期限與刪除流程、備份還原演練，以及檔案惡意內容掃描。
 
 

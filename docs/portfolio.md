@@ -17,6 +17,7 @@ Webhook 處理、具來源引用的 RAG、角色權限、資料庫一致性與�
   同一一致性規則，避免「先查可用再寫入」的 race condition。
 - 實作可替換 Local／OpenAI RAG Provider、資料集草稿與發布、Embedding 相容檢查、
   後端引用及低信心人工轉接；AI 不具預約資料寫入權限。
+- 以資料庫租約控管 AI 使用者速率、租戶／全域日額度及租戶並行數，保存 token 用量與拒絕原因，並提供全域停用開關。
 - 建立 HttpOnly Session、CSRF、短效單次 Token、API Key 雜湊、敏感憑證加密與
   HTTP Security Headers，並以 JUnit、Node Test、Playwright、Docker 與 CI 驗證。
 
@@ -36,7 +37,7 @@ Webhook 處理、具來源引用的 RAG、角色權限、資料庫一致性與�
 
 ### 如何避免 AI 亂操作
 
-模型只接收問題與已檢索文字，沒有資料庫或 Booking tool。預約／取消由確定性的
+模型依流程接收問題、短期對話與已檢索文字，沒有資料庫或 Booking tool。預約／取消由確定性的
 Intent 與 `BookingManager` 執行；RAG 只讀 Active Dataset，引用由後端建立，資料不足
 就回退人工客服。
 
@@ -51,6 +52,8 @@ HTTP request 只做驗章、去重與落庫，Worker 再非同步處理。Claim 
 - 尚未完成外部限流、PITR／Restore Drill、完整 Metrics／Tracing、PII 自動清除與
   key-version rotation；這些已列入 [稽核報告](project-review.md)。
 - Local AI 是可重現的離線測試替身，不等同正式語意模型。
+- 已有 AI 用量配額，但尚未涵蓋所有 HTTP 入口的濫用防護。
+- Java 整合測試主要使用 H2；實際 PostgreSQL 併發與交易驗證、容量壓測仍待補。
 - 不要在履歷填寫未量測的 QPS、P95、節省成本或準確率；可改寫成「設計門檻」或
   「待壓測驗證」。
 
